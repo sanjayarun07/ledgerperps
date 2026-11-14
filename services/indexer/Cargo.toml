@@ -1,0 +1,29 @@
+[package]
+name = "perps-indexer"
+version = "0.1.0"
+edition = "2021"
+description = "Event indexer + read API for the Perps exchange (derived infrastructure, never authoritative for balances)"
+publish = false
+
+[dependencies]
+alloy-primitives = { version = "=1.7.3", features = ["serde"] }
+alloy-json-abi = "=1.7.3"
+alloy-dyn-abi = "=1.7.3"
+alloy-provider = { version = "=2.5.0", default-features = false, features = ["reqwest"] }
+alloy-rpc-client = "=2.5.0"
+tokio = { version = "=1.54.1", features = ["full"] }
+axum = { version = "=0.8.9", features = ["ws"] }
+tokio-postgres = { version = "=0.7.18", features = ["with-serde_json-1"] }
+async-trait = "=0.1.89"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+clap = { version = "=4.6.7", features = ["derive", "env"] }
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+futures-util = "=0.3.34"
+anyhow = "=1.0.104"
+
+[dev-dependencies]
+tower = { version = "=0.5.3", features = ["util"] }
+tokio-tungstenite = "=0.30.0"
+http-body-util = "=0.1.5"

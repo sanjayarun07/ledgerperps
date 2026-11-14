@@ -1,0 +1,1154 @@
+openapi: 3.1.0
+info:
+  title: Perps Indexer Read API
+  version: 1.0.0
+  summary: Read-only market data and account history derived from on-chain events.
+  description: |
+    **Derived infrastructure. UNAUDITED prototype.** Everything returned here is computed by an indexer from contract
+    events. It is **never authoritative** for balances, margin, collateral or solvency: the chain is. Positions are
+    reconstructed from fills and can be wrong if the indexer started after the account traded or has a bug; verify
+    against the contract before acting on money.
+
+    Conventions
+    * All 64+ bit integers (prices, sizes, USDC amounts, fees, indexes) are **decimal strings**. Ids, block numbers and
+      timestamps are JSON numbers.
+    * Price scale 1e6 (USDC per base unit), size scale 1e8, USDC/fees 1e6, funding rate 1e12 = 100% per interval.
+    * Every response carries `indexed_block` (the highest block reflected in the data).
+    * Lists are cursor-paginated: pass `next_cursor` back as `cursor`. Cursors are opaque and only valid with the same
+      filters. `order=desc` (default, newest first) or `asc`.
+    * Errors are always `{ "code": "...", "message": "..." }` with a stable machine-readable `code`.
+    * Authentication is **optional and read-only**. When the operator starts the indexer with `--require-api-key`, send a
+      key as `X-API-Key: pk_<id>_<secret>` or `Authorization: Bearer pk_...`; keys only ever grant GET access (they are
+      stored hashed, never in clear). Without that flag a key is still validated when presented. Operational endpoints
+      (`/healthz`, `/readyz`, `/metrics`) never need a key.
+    * Rate limiting is a token bucket per API key (when authenticated) or per client IP (otherwise); `429` carries
+      `Retry-After`. State is shared across replicas through Redis when the operator configures `REDIS_URL`, otherwise it
+      is per process. `X-Forwarded-For` is honoured only when the direct peer is in the operator's trusted-proxy list.
+    * CORS: cross-origin browser access is denied unless the origin is `localhost`/`127.0.0.1` or in the operator's
+      `--cors-origins` allowlist (never a wildcard).
+    * Reverted transactions emit **no contract events**, so they are invisible in every list endpoint. The optional
+      receipt tracker (`POST /v1/tx/track`, `GET /v1/tx/{hash}`; operator opt-in) reports their status from receipts.
+    * `/v1/status` reports **canonical execution** (latest block seen on the execution node) separately from
+      **parent-chain finality**, which is `unknown` here (not available on local chains and not read by this indexer).
+  license:
+    name: UNLICENSED
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local default
+security:
+  - {}
+  - ApiKeyHeader: []
+  - BearerKey: []
+tags:
+  - { name: market, description: Market data and exchange-wide events }
+  - { name: account, description: 'Per-account history (derived, not authoritative)' }
+  - { name: system, description: 'Status, health and realtime' }
+paths:
+  /v1/status:
+    get:
+      tags: [system]
+      operationId: getStatus
+      summary: Indexer and chain status
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Status' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/markets:
+    get:
+      tags: [market]
+      operationId: listMarkets
+      summary: All markets
+      responses:
+        '200':
+          description: Markets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, indexed_block]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Market' }
+                  indexed_block: { $ref: '#/components/schemas/IndexedBlock' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/markets/{market}:
+    get:
+      tags: [market]
+      operationId: getMarket
+      summary: One market
+      parameters: [{ $ref: '#/components/parameters/Market' }]
+      responses:
+        '200':
+          description: Market
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, indexed_block]
+                properties:
+                  data: { $ref: '#/components/schemas/Market' }
+                  indexed_block: { $ref: '#/components/schemas/IndexedBlock' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/markets/{market}/book:
+    get:
+      tags: [market]
+      operationId: getBook
+      summary: Order book snapshot with per-market sequence number
+      description: |
+        `seq` is the number of book-changing events applied to this market. It is the same counter used by websocket
+        `delta` messages, so a client can take a REST snapshot, then apply websocket deltas with `seq > snapshot.seq`.
+      parameters:
+        - { $ref: '#/components/parameters/Market' }
+        - name: depth
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 50 }
+      responses:
+        '200':
+          description: Book
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, indexed_block]
+                properties:
+                  data: { $ref: '#/components/schemas/Book' }
+                  indexed_block: { $ref: '#/components/schemas/IndexedBlock' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/markets/{market}/trades:
+    get:
+      tags: [market]
+      operationId: listTrades
+      summary: Trades (fills) of a market
+      parameters:
+        - { $ref: '#/components/parameters/Market' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+      responses:
+        '200':
+          description: Trades (fills)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Fill' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/markets/{market}/candles:
+    get:
+      tags: [market]
+      operationId: listCandles
+      summary: OHLCV candles built from fills
+      description: Returns the most recent `limit` candles inside [from, to], oldest first. Buckets without trades are not emitted.
+      parameters:
+        - { $ref: '#/components/parameters/Market' }
+        - name: interval
+          in: query
+          schema: { type: string, enum: ['1m', '5m', '1h'], default: '1m' }
+        - name: from
+          in: query
+          description: Inclusive bucket start (unix seconds)
+          schema: { type: integer, minimum: 0 }
+        - name: to
+          in: query
+          description: Inclusive bucket start (unix seconds)
+          schema: { type: integer, minimum: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 5000, default: 500 }
+      responses:
+        '200':
+          description: Candles
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, indexed_block]
+                properties:
+                  data:
+                    type: object
+                    required: [market, interval, candles]
+                    properties:
+                      market: { type: integer }
+                      interval: { type: string, enum: ['1m', '5m', '1h'] }
+                      candles:
+                        type: array
+                        items: { $ref: '#/components/schemas/Candle' }
+                  indexed_block: { $ref: '#/components/schemas/IndexedBlock' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/markets/{market}/funding:
+    get:
+      tags: [market]
+      operationId: listFundingUpdates
+      summary: Funding index updates (FundingUpdated events)
+      parameters:
+        - { $ref: '#/components/parameters/Market' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+      responses:
+        '200':
+          description: Funding updates
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/FundingUpdate' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/accounts/{acct}/orders:
+    get:
+      tags: [account]
+      operationId: listAccountOrders
+      summary: Orders of an account with derived status
+      parameters:
+        - { $ref: '#/components/parameters/Acct' }
+        - { $ref: '#/components/parameters/Sub' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/OrderStatus' }
+        - name: market
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 255 }
+      responses:
+        '200':
+          description: Orders (cursor = order id)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/OrderRow' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/accounts/{acct}/fills:
+    get:
+      tags: [account]
+      operationId: listAccountFills
+      summary: Fills of an account (maker or taker)
+      parameters:
+        - { $ref: '#/components/parameters/Acct' }
+        - { $ref: '#/components/parameters/Sub' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+        - name: market
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 255 }
+      responses:
+        '200':
+          description: Fills where the account was maker or taker
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          allOf:
+                            - $ref: '#/components/schemas/Fill'
+                            - type: object
+                              required: [role]
+                              properties:
+                                role: { type: string, enum: [maker, taker, both] }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/accounts/{acct}/positions:
+    get:
+      tags: [account]
+      operationId: listAccountPositions
+      summary: Positions reconstructed from fills, liquidations and ADL
+      description: Derived, not authoritative. Reconcile with the contract's `positions(acct, market)`.
+      parameters:
+        - { $ref: '#/components/parameters/Acct' }
+        - { $ref: '#/components/parameters/Sub' }
+        - name: include_closed
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Positions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, indexed_block]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Position' }
+                  indexed_block: { $ref: '#/components/schemas/IndexedBlock' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/accounts/{acct}/funding:
+    get:
+      tags: [account]
+      operationId: listAccountFunding
+      summary: Funding settlements (FundingSettled events)
+      parameters:
+        - { $ref: '#/components/parameters/Acct' }
+        - { $ref: '#/components/parameters/Sub' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+      responses:
+        '200':
+          description: Settlements
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/FundingSettlement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/accounts/{acct}/transfers:
+    get:
+      tags: [account]
+      operationId: listAccountTransfers
+      summary: Deposits, withdrawals, internal transfers and isolated-margin movements
+      parameters:
+        - { $ref: '#/components/parameters/Acct' }
+        - { $ref: '#/components/parameters/Sub' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+        - { $ref: '#/components/parameters/TransferKind' }
+      responses:
+        '200':
+          description: Transfers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Transfer' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/accounts/{acct}/twaps:
+    get:
+      tags: [account]
+      operationId: listAccountTwaps
+      summary: TWAP schedules of an account
+      parameters:
+        - { $ref: '#/components/parameters/Acct' }
+        - { $ref: '#/components/parameters/Sub' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+      responses:
+        '200':
+          description: TWAP schedules (cursor = twap id)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Twap' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/accounts/{acct}/conditionals:
+    get:
+      tags: [account]
+      operationId: listAccountConditionals
+      summary: Conditional orders of an account
+      parameters:
+        - { $ref: '#/components/parameters/Acct' }
+        - { $ref: '#/components/parameters/Sub' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+      responses:
+        '200':
+          description: Conditional (stop / take-profit) orders (cursor = id)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Conditional' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/orders/{id}:
+    get:
+      tags: [account]
+      operationId: getOrder
+      summary: One order by id
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: Order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, indexed_block]
+                properties:
+                  data: { $ref: '#/components/schemas/OrderRow' }
+                  indexed_block: { $ref: '#/components/schemas/IndexedBlock' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/twaps/{id}:
+    get:
+      tags: [account]
+      operationId: getTwap
+      summary: One TWAP by id
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: TWAP
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, indexed_block]
+                properties:
+                  data: { $ref: '#/components/schemas/Twap' }
+                  indexed_block: { $ref: '#/components/schemas/IndexedBlock' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/conditionals/{id}:
+    get:
+      tags: [account]
+      operationId: getConditional
+      summary: One conditional order by id
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: Conditional order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, indexed_block]
+                properties:
+                  data: { $ref: '#/components/schemas/Conditional' }
+                  indexed_block: { $ref: '#/components/schemas/IndexedBlock' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/liquidations:
+    get:
+      tags: [market]
+      operationId: listLiquidations
+      summary: Liquidations
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+        - name: market
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 255 }
+        - name: acct
+          in: query
+          description: Account key (32 bytes) or owner address (with `sub`)
+          schema: { type: string }
+        - { $ref: '#/components/parameters/Sub' }
+      responses:
+        '200':
+          description: Liquidations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Liquidation' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/bad-debt:
+    get:
+      tags: [market]
+      operationId: listBadDebt
+      summary: Unresolved bad debt, ADL executions and recapitalisations
+      description: |
+        `bad_debt_unresolved` rows are emitted by liquidations, ordinary fills that leave a flat account negative, delist
+        settlement and the permissionless `writeOff(account, market)`; the indexer is event-based so the originating
+        transaction type does not matter.
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+        - name: market
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 255 }
+      responses:
+        '200':
+          description: Events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/BadDebtEvent' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/backstop/events:
+    get:
+      tags: [market]
+      operationId: listBackstopEvents
+      summary: Backstop syncs, ADL skips, ADL premium ceiling and withdrawal-gate changes
+      description: |
+        `backstop_synced` (`BackstopSynced`): `from_insurance` + `to_debt` > 0 means the backstop's mark-to-market deficit was recorded
+        (insurance first, the rest as unresolved bad debt on `market`); `refunded_insurance` / `repaid_debt` > 0 means positive backstop
+        equity repaid earlier draws. `adl_skipped`: ADL passed over `target` because it had no slack above maintenance (`slack`).
+        `adl_hard_prem_set` (`bps`) and `withdraw_gate_set` (`threshold`, micro-USDC; 2^128-1 or more means the gate is disabled).
+        Amounts are decimal strings. `BadDebtUnresolved` caused by a backstop sync carries the BACKSTOP account key in `/v1/bad-debt`.
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+        - name: market
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 255 }
+      responses:
+        '200':
+          description: Events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/BackstopEvent' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/transfers:
+    get:
+      tags: [market]
+      operationId: listTransfers
+      summary: All deposits / withdrawals / transfers
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Order' }
+        - { $ref: '#/components/parameters/TransferKind' }
+      responses:
+        '200':
+          description: Transfers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Transfer' }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/ws:
+    get:
+      tags: [system]
+      operationId: websocket
+      summary: WebSocket upgrade (see ws-schemas.md)
+      description: |
+        Upgrades to a WebSocket. Channels: `book`, `trades`, `candles`, `orders`, `fills`. Message formats, sequence
+        numbers, gap detection, backpressure (close code 4008) and reconnect guidance are in `docs/ws-schemas.md`.
+      responses:
+        '101':
+          description: Switching Protocols
+        '4XX':
+          description: Not a valid WebSocket upgrade request (rejected by the HTTP layer before any upgrade)
+          content:
+            text/plain:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/tx/track:
+    post:
+      tags: [system]
+      operationId: trackTx
+      summary: Start tracking a transaction hash by receipt (opt-in; operator must pass --enable-tx-tracker)
+      description: |
+        The one write endpoint, and it writes nothing on chain: it records a hash so the indexer polls its receipt. This is
+        how a client learns that a transaction **reverted** (reverted transactions emit no contract events and therefore
+        never show up anywhere else in this API). Idempotent per hash. A bounded number of hashes may be pending at once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tx_hash]
+              properties:
+                tx_hash: { $ref: '#/components/schemas/Hex32' }
+      responses:
+        '200':
+          description: Tracked (current status returned)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TrackedTx' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/tx/{hash}:
+    get:
+      tags: [system]
+      operationId: getTx
+      summary: Receipt-based status of a tracked transaction
+      parameters:
+        - { name: hash, in: path, required: true, schema: { $ref: '#/components/schemas/Hex32' } }
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/TrackedTx' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /healthz:
+    get:
+      tags: [system]
+      operationId: healthz
+      summary: Liveness (process is up). Not rate limited.
+      responses:
+        '200':
+          description: ok
+          content:
+            text/plain:
+              schema: { type: string, const: ok }
+        '405': { $ref: '#/components/responses/Error' }
+  /readyz:
+    get:
+      tags: [system]
+      operationId: readyz
+      summary: Readiness (bootstrapped, not halted, lag within threshold). Not rate limited.
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ready }
+                  lag_blocks: { type: [integer, 'null'] }
+        '503':
+          description: Not ready (code `not_ready`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+  /metrics:
+    get:
+      tags: [system]
+      operationId: metrics
+      summary: Prometheus text exposition. Not rate limited.
+      responses:
+        '200':
+          description: Metrics
+          content:
+            text/plain:
+              schema: { type: string }
+        '405': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    ApiKeyHeader: { type: apiKey, in: header, name: X-API-Key, description: 'Read-only key from `perps-indexer keys create`' }
+    BearerKey: { type: http, scheme: bearer, description: 'The same key as `Authorization: Bearer pk_...`' }
+  parameters:
+    Market:
+      name: market
+      in: path
+      required: true
+      schema: { type: integer, minimum: 0, maximum: 255 }
+    Acct:
+      name: acct
+      in: path
+      required: true
+      description: |
+        Account key (`0x` + 64 hex, = keccak256(abi.encode(owner, sub))) or a 20-byte owner address, in which case the
+        key is derived from `sub` (default 0).
+      schema: { type: string, pattern: '^(0x)?([0-9a-fA-F]{64}|[0-9a-fA-F]{40})$' }
+    Sub:
+      name: sub
+      in: query
+      description: Subaccount number used when `acct` is an owner address
+      schema: { type: integer, minimum: 0, maximum: 255, default: 0 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque `next_cursor` from the previous page
+      schema: { type: string, pattern: '^[0-9a-f]+$' }
+    Order:
+      name: order
+      in: query
+      schema: { type: string, enum: [asc, desc], default: desc }
+    TransferKind:
+      name: kind
+      in: query
+      schema: { type: string, enum: [deposit, withdraw, internal_transfer, iso_margin] }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing (`api_key_required`) or invalid/revoked (`unauthorized`) API key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Rate limit exceeded (code `rate_limited`)
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable code
+          enum: [invalid_argument, not_found, method_not_allowed, rate_limited, not_ready, unauthorized, api_key_required, internal]
+        message: { type: string }
+    IndexedBlock:
+      type: [integer, 'null']
+      description: Highest block reflected in this response
+    Hex32:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{64}$'
+    Address:
+      type: string
+      pattern: '^0x[0-9a-fA-F]{40}$'
+    PageEnvelope:
+      type: object
+      required: [data, next_cursor, indexed_block]
+      properties:
+        data: { type: array }
+        next_cursor:
+          type: [string, 'null']
+          description: Null on the last page
+        indexed_block: { $ref: '#/components/schemas/IndexedBlock' }
+    Status:
+      type: object
+      required: [schema_version, chain_id, exchange, indexed_head, chain_head, lag_blocks, synced, canonical_execution, parent_chain_finality, disclaimer]
+      properties:
+        schema_version: { type: integer }
+        chain_id: { type: integer }
+        exchange: { type: string }
+        indexed_head:
+          type: [object, 'null']
+          properties:
+            number: { type: integer }
+            hash: { $ref: '#/components/schemas/Hex32' }
+            timestamp: { type: integer }
+        chain_head: { type: [integer, 'null'] }
+        lag_blocks: { type: [integer, 'null'] }
+        synced: { type: boolean }
+        halted:
+          type: [string, 'null']
+          description: |
+            Set when indexing stopped and needs operator action. This now only happens when a reorg is deeper than the
+            retained block-hash history (`--block-retention`) or the RPC node's chain no longer shares any retained block.
+        alert:
+          type: [string, 'null']
+          description: |
+            Sticky operator alert, e.g. a reorg deeper than `--reorg-window` that was re-anchored by walking the stored
+            hash chain. Indexing continued; investigate the RPC node. Also exported as `indexer_alert_active`.
+        history:
+          type: object
+          description: What is held in memory versus served from PostgreSQL
+          properties:
+            fills_in_memory: { type: integer, description: 'Fill rows in the bounded in-memory window (`--mem-fills`)' }
+            fills_older_served_from_postgres: { type: boolean, description: 'True once older fills were evicted from memory; trades/fills endpoints then page through PostgreSQL' }
+            last_replay_events: { type: integer, description: 'Events replayed at the last startup/reorg rebuild (snapshot tail)' }
+        canonical_execution:
+          type: object
+          description: Latest block as executed by the execution node. Subject to reorg; not parent-chain finality.
+          properties:
+            source: { type: string }
+            block: { type: [integer, 'null'] }
+            timestamp: { type: [integer, 'null'] }
+            note: { type: string }
+        parent_chain_finality:
+          type: object
+          description: Whether the batch containing the indexed head is final on the parent chain.
+          required: [status]
+          properties:
+            status: { type: string, enum: [unknown, posted, finalized], description: 'This indexer only ever reports `unknown`' }
+            reason: { type: string }
+            block: { type: [integer, 'null'] }
+        rpc_finalized_block:
+          type: [integer, 'null']
+          description: The RPC node's own `finalized` tag, if supported. Not parent-chain finality.
+        events_indexed: { type: integer }
+        reorgs_handled: { type: integer }
+        disclaimer: { type: string }
+    MarketConfig:
+      type:
+        - object
+        - 'null'
+      description: Read via eth_call at indexer startup (the contract emits no market-created event)
+      properties:
+        name: { type: [string, 'null'] }
+        tick: { type: [integer, 'null'] }
+        lot: { type: [integer, 'null'] }
+        min_notional: { type: [integer, 'null'] }
+        max_order_size: { type: [string, 'null'] }
+        max_oi: { type: [string, 'null'] }
+        funding_interval: { type: [integer, 'null'] }
+    Market:
+      type: object
+      required: [id, state, state_name, funding_rate, funding_index, open_interest, trade_count]
+      properties:
+        id: { type: integer }
+        name: { type: [string, 'null'] }
+        state: { type: integer, description: '0 normal, 1 reduce_only, 2 oracle_degraded, 3 paused, 4 recovery' }
+        state_name: { type: string, enum: [normal, reduce_only, oracle_degraded, paused, recovery, unknown] }
+        last_price: { type: [string, 'null'], description: 'Last fill price (1e6)' }
+        funding_rate: { type: string, description: 'Last applied per-interval rate, 1e12 = 100%' }
+        funding_index: { type: string }
+        last_funding_ts: { type: [integer, 'null'] }
+        open_interest: { type: string, description: 'Sum of long position sizes (1e8)' }
+        volume_base: { type: string }
+        volume_quote: { type: string }
+        trade_count: { type: integer }
+        config: { $ref: '#/components/schemas/MarketConfig' }
+        stats_24h:
+          type: object
+          properties:
+            volume_base: { type: string }
+            volume_quote: { type: string }
+            high: { type: [string, 'null'] }
+            low: { type: [string, 'null'] }
+            open: { type: [string, 'null'] }
+    Book:
+      type: object
+      required: [market, seq, bids, asks]
+      properties:
+        market: { type: integer }
+        seq: { type: integer, description: Number of book-changing events applied to this market }
+        bids:
+          type: array
+          description: '[price, size] decimal strings, highest price first'
+          items: { $ref: '#/components/schemas/Level' }
+        asks:
+          type: array
+          description: '[price, size] decimal strings, lowest price first'
+          items: { $ref: '#/components/schemas/Level' }
+        levels: { type: string }
+    Level:
+      type: array
+      prefixItems:
+        - { type: string }
+        - { type: string }
+      minItems: 2
+      maxItems: 2
+    Fill:
+      type: object
+      required: [trade_id, market, maker_order_id, maker, taker, taker_side, price, size, notional, taker_fee, maker_fee, block, log_index, ts, tx_hash]
+      properties:
+        trade_id: { type: string }
+        market: { type: integer }
+        maker_order_id: { type: integer }
+        taker_order_id:
+          type: [integer, 'null']
+          description: Inferred from the OrderAccepted that precedes the fill in the same transaction
+        maker: { $ref: '#/components/schemas/Hex32' }
+        taker: { $ref: '#/components/schemas/Hex32' }
+        taker_side: { type: string, enum: [buy, sell] }
+        price: { type: string }
+        size: { type: string }
+        notional: { type: string, description: 'floor(price*size/1e8), USDC 1e6' }
+        taker_fee: { type: string }
+        maker_fee: { type: string, description: Negative = rebate }
+        block: { type: integer }
+        log_index: { type: integer }
+        ts: { type: integer }
+        tx_hash: { $ref: '#/components/schemas/Hex32' }
+    Candle:
+      type: object
+      required: [t, o, h, l, c, v, qv, n]
+      properties:
+        t: { type: integer, description: 'Bucket start, unix seconds' }
+        o: { type: string }
+        h: { type: string }
+        l: { type: string }
+        c: { type: string }
+        v: { type: string, description: 'Base volume (1e8)' }
+        qv: { type: string, description: 'Quote volume (USDC 1e6)' }
+        n: { type: integer, description: Trade count }
+    OrderStatus:
+      type: string
+      description: |
+        Derived from OrderAccepted / OrderRested / Fill / OrderCanceled. `rejected` means the *contract cancelled a
+        resting order for a system reason* (self-trade, invalid reduce-only, maker margin) with zero fills. Orders whose
+        transaction reverts emit no events and are not visible at all.
+      enum: [accepted, open, partially_filled, filled, canceled, expired, rejected]
+    OrderRow:
+      type: object
+      required: [id, acct, market, side, price, size, filled, remaining, status, tif]
+      properties:
+        id: { type: integer }
+        acct: { $ref: '#/components/schemas/Hex32' }
+        market: { type: integer }
+        side: { type: string, enum: [buy, sell] }
+        price: { type: string }
+        size: { type: string }
+        filled: { type: string }
+        remaining: { type: string, description: Quantity currently resting on the book }
+        avg_fill_price: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        tif: { type: string, enum: [gtc, ioc, fok, post_only, unknown] }
+        reduce_only: { type: boolean }
+        cloid: { type: string }
+        cancel_reason:
+          type: [string, 'null']
+          enum: [user, expired, self_trade, invalid_reduce_only, maker_margin, filled, liquidation, replaced, price_band, unknown, null]
+        truncated: { type: boolean, description: A GTC order hit matching bounds and its remainder was not rested }
+        parent:
+          type: [object, 'null']
+          properties:
+            kind: { type: string, enum: [twap, conditional] }
+            id: { type: integer }
+        created_block: { type: integer }
+        created_ts: { type: integer }
+        updated_block: { type: integer }
+        updated_ts: { type: integer }
+        tx_hash: { $ref: '#/components/schemas/Hex32' }
+    Position:
+      type: object
+      required: [acct, market, size, basis, realized_pnl, fees_paid, funding_paid]
+      properties:
+        acct: { $ref: '#/components/schemas/Hex32' }
+        market: { type: integer }
+        size: { type: string, description: 'Signed (+long / -short), 1e8' }
+        basis: { type: string, description: Signed sum(size*price) as in the contract }
+        entry_price: { type: [string, 'null'] }
+        realized_pnl: { type: string }
+        fees_paid: { type: string }
+        funding_paid: { type: string, description: Positive = paid }
+        approximate:
+          type: boolean
+          description: |
+            True for the backstop after an ADL when the contract event carries no mark price. `size` and `basis` stay exact
+            (an ADL leg only reduces the backstop pro rata); only `realized_pnl` uses a price estimated from
+            `AdlExecuted.debtCleared/size`, within `realized_pnl_error_bound`. Exact (false) when the event carries `markPrice`.
+        realized_pnl_error_bound: { type: string, description: 'Upper bound of |error| of realized_pnl in micro-USDC; "0" when not approximate' }
+        updated_block: { type: integer }
+    TrackedTx:
+      type: object
+      required: [tx_hash, status, submitted_at]
+      properties:
+        tx_hash: { $ref: '#/components/schemas/Hex32' }
+        status: { type: string, enum: [pending, success, reverted, dropped], description: '`dropped` = no receipt within the timeout (it may still land; then the status updates)' }
+        submitted_at: { type: integer }
+        checked_at: { type: [integer, 'null'] }
+        block_number: { type: [integer, 'null'] }
+        block_hash: { oneOf: [{ $ref: '#/components/schemas/Hex32' }, { type: 'null' }] }
+        gas_used: { type: [string, 'null'] }
+        note: { type: string }
+    FundingUpdate:
+      type: object
+      properties:
+        market: { type: integer }
+        intervals: { type: string }
+        rate: { type: string }
+        new_index: { type: string }
+        block: { type: integer }
+        log_index: { type: integer }
+        ts: { type: integer }
+    FundingSettlement:
+      type: object
+      properties:
+        acct: { $ref: '#/components/schemas/Hex32' }
+        market: { type: integer }
+        owed: { type: string, description: Positive = account paid }
+        block: { type: integer }
+        log_index: { type: integer }
+        ts: { type: integer }
+    Liquidation:
+      type: object
+      properties:
+        acct: { $ref: '#/components/schemas/Hex32' }
+        market: { type: integer }
+        keeper: { $ref: '#/components/schemas/Address' }
+        size: { type: string }
+        price: { type: string }
+        fee: { type: string }
+        bad_debt: { type: string }
+        block: { type: integer }
+        log_index: { type: integer }
+        ts: { type: integer }
+        tx_hash: { $ref: '#/components/schemas/Hex32' }
+    BackstopEvent:
+      type: object
+      properties:
+        kind: { type: string, enum: [backstop_synced, adl_skipped, adl_hard_prem_set, withdraw_gate_set] }
+        market: { type: [integer, 'null'] }
+        target: { type: [string, 'null'] }
+        equity_before: { type: [string, 'null'] }
+        from_insurance: { type: [string, 'null'] }
+        to_debt: { type: [string, 'null'] }
+        refunded_insurance: { type: [string, 'null'] }
+        repaid_debt: { type: [string, 'null'] }
+        slack: { type: [string, 'null'] }
+        bps: { type: [integer, 'null'] }
+        threshold: { type: [string, 'null'] }
+        block: { type: integer }
+        log_index: { type: integer }
+        ts: { type: integer }
+        tx_hash: { type: string }
+    BadDebtEvent:
+      type: object
+      properties:
+        kind: { type: string, enum: [bad_debt_unresolved, adl, recapitalized] }
+        acct: { oneOf: [{ $ref: '#/components/schemas/Hex32' }, { type: 'null' }] }
+        market: { type: [integer, 'null'] }
+        amount: { type: string }
+        size: { type: [string, 'null'] }
+        price: { type: [string, 'null'] }
+        block: { type: integer }
+        log_index: { type: integer }
+        ts: { type: integer }
+        tx_hash: { $ref: '#/components/schemas/Hex32' }
+    Transfer:
+      type: object
+      properties:
+        kind: { type: string, enum: [deposit, withdraw, internal_transfer, iso_margin] }
+        acct: { $ref: '#/components/schemas/Hex32' }
+        counterparty: { oneOf: [{ $ref: '#/components/schemas/Hex32' }, { type: 'null' }] }
+        from_address: { oneOf: [{ $ref: '#/components/schemas/Address' }, { type: 'null' }] }
+        market: { type: [integer, 'null'] }
+        amount: { type: string }
+        block: { type: integer }
+        log_index: { type: integer }
+        ts: { type: integer }
+        tx_hash: { $ref: '#/components/schemas/Hex32' }
+    Twap:
+      type: object
+      properties:
+        id: { type: integer }
+        acct: { $ref: '#/components/schemas/Hex32' }
+        market: { type: integer }
+        side: { type: string, enum: [buy, sell] }
+        total: { type: string }
+        filled: { type: string }
+        slices: { type: integer }
+        slices_done: { type: integer }
+        slices_failed: { type: integer }
+        interval_secs: { type: integer }
+        slippage_bps: { type: integer }
+        reduce_only: { type: boolean }
+        status: { type: string, enum: [active, done, canceled] }
+        slice_log:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer }
+              filled: { type: string }
+              ok: { type: boolean }
+              block: { type: integer }
+              ts: { type: integer }
+        created_block: { type: integer }
+        created_ts: { type: integer }
+        updated_block: { type: integer }
+    Conditional:
+      type: object
+      properties:
+        id: { type: integer }
+        acct: { $ref: '#/components/schemas/Hex32' }
+        market: { type: integer }
+        side: { type: string, enum: [buy, sell] }
+        above: { type: boolean }
+        trigger: { type: string }
+        limit: { type: string }
+        size: { type: string }
+        reduce_only: { type: boolean }
+        sibling: { type: integer, description: 'OCO partner id, 0 = none' }
+        status: { type: string, enum: [active, triggered, canceled] }
+        trigger_mark_price: { type: [string, 'null'] }
+        created_block: { type: integer }
+        created_ts: { type: integer }
+        updated_block: { type: integer }
