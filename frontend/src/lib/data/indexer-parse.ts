@@ -123,6 +123,14 @@ export function parseLiquidations(data: unknown): LedgerEvent[] {
   return arr(data, "liquidations").map((x) => { const o = obj(x, "liquidation"); return { kind: "Liquidated" as const, amount: big(o.size, "size"), market: num(o.market, "market"), block: big(o.block, "block"), time: num(o.ts, "ts"), txHash: hex(o.tx_hash, "tx_hash") }; });
 }
 
+/** `/v1/liquidations` -> protocol-wide solvency rows (amount = notional USDC 1e6 = size * price / 1e8). */
+export function parseLiquidationRows(data: unknown): SolvencyEvent[] {
+  return arr(data, "liquidations").map((x) => {
+    const o = obj(x, "liquidation"); const size = big(o.size, "size"); const price = big(o.price, "price");
+    return { kind: "liquidated" as const, market: num(o.market, "market"), acct: hex(o.acct, "acct"), amount: (size * price) / 100_000_000n, size, price, block: big(o.block, "block"), time: num(o.ts, "ts"), txHash: hex(o.tx_hash, "tx_hash") };
+  });
+}
+
 // ---- twaps / conditionals -----------------------------------------------------------------------------------------
 export function parseTwap(x: unknown): Twap {
   const o = obj(x, "twap");

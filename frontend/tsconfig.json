@@ -32,11 +32,12 @@
     "**/*.ts",
     "**/*.tsx",
     ".next-polish-build/types/**/*.ts",
+    ".next-r3/types/**/*.ts",
     ".next-testnet/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-r3/types/**/*.ts"
+    ".next-r3b/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

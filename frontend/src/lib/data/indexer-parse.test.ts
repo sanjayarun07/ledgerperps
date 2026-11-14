@@ -193,3 +193,13 @@ describe("backstop phase 2 events", () => {
     ]);
   });
 });
+
+import { parseLiquidationRows } from "./indexer-parse";
+describe("parseLiquidationRows", () => {
+  it("maps /liquidations to protocol-wide solvency rows with notional = size * price / 1e8", () => {
+    const h = "0x" + "ab".repeat(32);
+    const rows = parseLiquidationRows([{ acct: h, bad_debt: "0", block: 7, fee: "1", keeper: "0x" + "11".repeat(20), log_index: 0, market: 3, price: "90000000", size: "50000000", ts: 1700000000, tx_hash: h }]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "liquidated", market: 3, amount: 45_000_000n, size: 50_000_000n, price: 90_000_000n, block: 7n, txHash: h });
+  });
+});

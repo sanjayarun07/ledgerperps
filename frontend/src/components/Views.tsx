@@ -1,7 +1,8 @@
 "use client";
 import { useBrand } from "@/brand/context";
 import { useApp } from "@/lib/app";
-import { DEMO_TAG, MARKETS } from "@/lib/config";
+import { DEMO_TAG, MARKETS, NETWORK } from "@/lib/config";
+import { explorerTx } from "@/lib/network";
 import { useFunding, useMark, useMarketInfo, useStats24h, useSystem, useAccountState, useLedger, useSolvency } from "@/lib/queries";
 import { allowedActions } from "@/lib/marketRules";
 import { MARKET_STATES } from "@/lib/order";
@@ -18,6 +19,7 @@ import MarketInfo from "@/components/MarketInfo";
 import { Icon, Tri } from "@/components/Icon";
 
 const SOLVENCY_LABEL: Record<string, string> = {
+  liquidated: "Account liquidated (position taken by the backstop or the book)",
   bad_debt_unresolved: "Bad debt recorded (not covered by insurance)", liquidation_bad_debt: "Liquidation left bad debt",
   adl: "Auto-deleveraging", recapitalized: "Recapitalized", backstop_deficit: "Backstop loss recorded (insurance + bad debt)",
   backstop_repaid: "Backstop gains repaid earlier draws", adl_skipped: "ADL skipped an account with no margin slack",
@@ -27,13 +29,13 @@ const SOLVENCY_LABEL: Record<string, string> = {
 /** Protocol-wide loss events: liquidations, fills, delist settlement or a permissionless write-off can all record bad debt. */
 function SolvencyEventsPanel() {
   const sol = useSolvency().data;
-  const rows = (sol?.events ?? []).slice(0, 8);
+  const rows = (sol?.events ?? []).slice(0, 12);
   return (
     <div className="panel" data-testid="solvency-events">
       <h3>Bad debt, write-offs and deleveraging</h3>
       {!rows.length ? <p className="hint">No bad-debt, auto-deleveraging or recapitalization events seen.</p> : (
-        <div className="tbl-wrap"><table><thead><tr><th>Time</th><th>Event</th><th className="r">Amount (USDC)</th><th>Block</th></tr></thead>
-          <tbody>{rows.map((e) => <tr key={`${e.txHash}${e.kind}${e.block}`}><td>{new Date(e.time * 1000).toLocaleString()}</td><td>{SOLVENCY_LABEL[e.kind] ?? e.kind}{e.market !== null ? ` (${MARKETS[e.market]?.name ?? "#" + e.market})` : ""}</td><td className="r num">{fmtUsd(e.amount)}</td><td className="num">{e.block.toString()}</td></tr>)}</tbody></table></div>
+        <div className="tbl-wrap"><table><thead><tr><th>Time</th><th>Event</th><th className="r">Amount (USDC)</th><th>Block</th><th>Tx</th></tr></thead>
+          <tbody>{rows.map((e) => <tr key={`${e.txHash}${e.kind}${e.block}`}><td>{new Date(e.time * 1000).toLocaleString()}</td><td>{SOLVENCY_LABEL[e.kind] ?? e.kind}{e.market !== null ? ` (${MARKETS[e.market]?.name ?? "#" + e.market})` : ""}</td><td className="r num">{fmtUsd(e.amount)}</td><td className="num">{e.block.toString()}</td><td>{explorerTx(NETWORK, e.txHash) ? <a href={explorerTx(NETWORK, e.txHash)} target="_blank" rel="noreferrer noopener" aria-label={`Open transaction ${e.txHash} in the explorer`}>{e.txHash.slice(0, 8)}...</a> : <span className="mute" title={e.txHash}>{e.txHash.slice(0, 8)}...</span>}</td></tr>)}</tbody></table></div>
       )}
     </div>
   );

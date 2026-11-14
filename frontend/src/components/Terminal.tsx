@@ -106,7 +106,7 @@ function ChainStatus({ tone, text, onClose }: { tone: string; text: string; onCl
   const ms = sys?.markets.find((x) => x.id === market);
   const health = useHealth().data;
   const bk = useBackstop(market).data;
-  const usd = (v: bigint | null | undefined) => (v === null || v === undefined ? "-" : `${fmtUsd(v)} USDC`);
+  const usd = (v: bigint | null | undefined) => (v === null || v === undefined ? "-" : `${fmtUsd(v, v !== 0n && v > -1_000_000n && v < 1_000_000n ? 3 : 2)} USDC`); // sub-1 USDC amounts (e.g. 0.045 of bad debt) keep a third decimal
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onClose]);
   return (
     <div className="statuspop" role="dialog" aria-label="Chain status">

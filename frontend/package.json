@@ -11,7 +11,10 @@
     "start": "next start -p 3100",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sync:testnet": "node scripts/sync-deployment.mjs arbitrumSepolia --out deployment.testnet.json",
+    "dev:testnet": "npm run sync:testnet && env NEXT_PUBLIC_DEPLOYMENT_FILE=testnet NEXT_PUBLIC_CHAIN_ID=421614 NEXT_PUBLIC_NETWORK_KIND=testnet NEXT_PUBLIC_RPC_URL=${NEXT_PUBLIC_TESTNET_RPC_URL:-http://127.0.0.1:18702} NEXT_PUBLIC_INDEXER_URL=${NEXT_PUBLIC_TESTNET_INDEXER_URL:-http://127.0.0.1:18700} NEXT_DIST_DIR=.next-testnet next dev -p 3150",
+    "build:testnet": "npm run sync:testnet && env NEXT_PUBLIC_DEPLOYMENT_FILE=testnet NEXT_PUBLIC_CHAIN_ID=421614 NEXT_PUBLIC_NETWORK_KIND=testnet NEXT_PUBLIC_RPC_URL=${NEXT_PUBLIC_TESTNET_RPC_URL:-http://127.0.0.1:18702} NEXT_PUBLIC_INDEXER_URL=${NEXT_PUBLIC_TESTNET_INDEXER_URL:-http://127.0.0.1:18700} NEXT_DIST_DIR=.next-testnet next build"
   },
   "dependencies": {
     "@tanstack/react-query": "5.90.5",

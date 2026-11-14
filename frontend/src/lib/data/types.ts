@@ -31,7 +31,7 @@ export interface AgentInfo { agent: Hex; expiry: bigint }
 export interface SystemStatus { globalPaused: boolean; markets: { id: number; state: number; markPrice: bigint | null; oracleOk: boolean }[]; blockNumber: bigint; blockTime: number }
 export interface AdlScore { market: number; /** null when the mark price is unavailable; 2^256-1 means equity <= 0 (first in line) */ score: bigint | null }
 export interface SolvencyEvent {
-  kind: "adl" | "recapitalized" | "bad_debt_unresolved" | "liquidation_bad_debt" | "backstop_deficit" | "backstop_repaid" | "adl_skipped" | "backstop_elevated" | "backstop_relaxed" | "backstop_taken" | "backstop_unwound"; market: number | null; acct: Hex | null;
+  kind: "liquidated" | "adl" | "recapitalized" | "bad_debt_unresolved" | "liquidation_bad_debt" | "backstop_deficit" | "backstop_repaid" | "adl_skipped" | "backstop_elevated" | "backstop_relaxed" | "backstop_taken" | "backstop_unwound"; market: number | null; acct: Hex | null;
   amount: bigint; size: bigint | null; price: bigint | null; block: bigint; time: number; txHash: Hex;
 }
 /** Exchange-wide health from chain views only (null = view unavailable). */

@@ -3,7 +3,7 @@ import { EXCHANGE, exchangeAbi, INDEXER_URL } from "../config";
 import { chainSource } from "./chain";
 import { IndexerFeed } from "./indexer-ws";
 import {
-  envelope, parseApiError, parseBackstopEvents, parseBadDebt, parseBook, parseCandles, parseConditionals, parseFills, parseFundingSettlements, parseLiquidations, parseOrders,
+  envelope, parseApiError, parseBackstopEvents, parseBadDebt, parseBook, parseLiquidationRows, parseCandles, parseConditionals, parseFills, parseFundingSettlements, parseLiquidations, parseOrders,
   parsePositions, parseStatus, parseTransfers, parseTwaps, type Envelope,
 } from "./indexer-parse";
 import type { Book, Candle, DataSource, IndexerStatus, SolvencyInfo, Trade, Twap } from "./types";
@@ -147,6 +147,8 @@ export const indexerSource: DataSource = {
       let events = parseBadDebt((await get(`/bad-debt`, { limit: 50 })).data);
       try { events = [...events, ...parseBackstopEvents((await get(`/backstop/events`, { limit: 50 })).data)].sort((a, b) => (a.block < b.block ? 1 : -1)); }
       catch (e) { noteFallback("backstop events", e); events = base.events; }
+      try { events = [...events, ...parseLiquidationRows((await get(`/liquidations`, { limit: 50 })).data)].sort((a, b) => (a.block < b.block ? 1 : -1)); }
+      catch (e) { noteFallback("liquidations", e); }
       return { ...base, events, source: "indexer+chain" } satisfies SolvencyInfo;
     } catch (e) { noteFallback("bad-debt events", e); return base; }
   },
