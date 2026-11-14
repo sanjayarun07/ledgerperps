@@ -18,6 +18,7 @@ const HUMAN: Record<string, string> = {
   OICap: "open-interest cap reached",
   NotLiquidatable: "account is above maintenance margin",
   Expired: "order or signature has expired",
+  BackstopCap: "The exchange's backstop already holds as much of this market as it is allowed to; discretionary backstop orders are refused until the inventory is reduced",
   WithdrawGated: "Withdrawals above your deposited amount are temporarily limited while the exchange has unresolved bad debt (you can still withdraw up to your principal(acct))",
 };
 

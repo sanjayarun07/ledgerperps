@@ -17,7 +17,8 @@ All numbers are RAW bigints: price 1e6, size 1e8, USDC 1e6. Use `toPrice/toSize/
 | orders | `placeOrder` (Tif.GTC/IOC/FOK/PostOnly, reduceOnly, cloid via `newCloid()`, expiry), `marketOrder` (IOC + `slippagePrice`), `cancelOrder`, `cancelAll`, `replaceOrder` |
 | signed | `signOrder` / `PerpClient#signOrder` (EIP-712 `OrderAction`, domain `PerpExchange`/`1`), `placeSigned` (relay), agent keys `approveAgent`/`revokeAgent`/`agentExpiry` |
 | advanced | `placeConditional`, `placeBracket`, `cancelConditional`, `executeConditional`, `placeTwap`, `executeTwapSlice`, `cancelTwap`, `setIsolated`, `addIsoMargin`, `removeIsoMargin` |
-| keepers | `liquidate`, `isLiquidatable`, `pokeFunding`, `writeOff`, `syncBackstop`, `backstopEquity`, `adlHealth`, `principal`, `withdrawGateActive`, `adl`, `adlScore`, `adlDebt`, `recapitalize` |
+| keepers | `liquidate`, `isLiquidatable`, `pokeFunding`, `writeOff`, `syncBackstop`, `backstopEquity`, `adlHealth`, `principal`, `withdrawGateActive`, `adl`, `adlScore`, `adlDebt`, `recapitalize`, `pokeBackstop`, `unwindBackstop`, `backstopCfg`, `backstopAuction` |
+| backstop takers | `takeBackstop(market, size, limitPx)` (Dutch auction on an elevated market; errors `BackstopCap`/`BadParam("not elevated")`), `backstopAuction`, `backstopCfg`, `backstopTakeFeeBps`; admin: `setBackstopCfg`, `setBackstopTakeFee`, `setBackstopPlaceOpen` |
 | reads | `markets`, `marketConfig`, `markPrice`, `oracleStatus`, `bookSnapshot`, `accountState`, `isoState`, `positions`, `openOrders`, `getFills`, `watchFills` |
 | helpers | `validateOrder`/`assertValidOrder` (tick, lot, min notional, max size), `roundPriceToTick`, `decodePerpError` -> `PerpError{errorName,args}` |
 | indexer | `IndexerClient` (REST `/v1/*` + WS) - **UNVERIFIED until the indexer lands**; types are hand-written guesses |

@@ -71,3 +71,28 @@ describe("ABI carries the backstop phase-1 surface", () => {
     expect(abi.some((f) => f.type === "error" && f.name === "WithdrawGated")).toBe(true);
   });
 });
+
+describe("ABI carries the backstop phase-2 surface", () => {
+  const abi = exchangeAbi as readonly any[];
+  const fn = (n: string) => abi.find((f) => f.type === "function" && f.name === n);
+  const ev = (n: string) => abi.find((f) => f.type === "event" && f.name === n);
+  it("functions", () => {
+    expect(fn("backstopAuction")?.outputs.map((o: any) => o.type)).toEqual(["bool", "bool", "uint256", "uint256", "uint256"]);
+    expect(fn("backstopCfg")?.outputs.map((o: any) => o.type)).toEqual(["uint128", "uint16", "uint32", "uint32", "uint32", "uint64"]);
+    expect(fn("takeBackstop")?.inputs.map((o: any) => o.type)).toEqual(["address", "uint8", "uint8", "uint128", "uint64"]);
+    expect(fn("unwindBackstop")?.inputs.map((o: any) => o.type)).toEqual(["bytes32[]", "uint8"]);
+    expect(fn("pokeBackstop")?.inputs.map((o: any) => o.type)).toEqual(["uint8"]);
+    expect(fn("setBackstopCfg")?.inputs.map((o: any) => o.type)).toEqual(["uint8", "uint128", "uint16", "uint32", "uint32", "uint32"]);
+    for (const n of ["backstopPlaceOpen", "backstopTakeFeeBps", "setBackstopPlaceOpen", "setBackstopTakeFee"]) expect(fn(n), n).toBeTruthy();
+  });
+  it("events and error", () => {
+    for (const n of ["BackstopCfgSet", "BackstopElevated", "BackstopPlaceOpenSet", "BackstopRelaxed", "BackstopTakeFeeSet", "BackstopTaken", "BackstopUnwound"]) expect(ev(n), n).toBeTruthy();
+    expect(abi.some((f) => f.type === "error" && f.name === "BackstopCap")).toBe(true);
+    expect(abi.length).toBe(199);
+  });
+  it("BackstopTaken carries the taker side and the discount", () => {
+    expect(ev("BackstopTaken").inputs.map((i: any) => `${i.name}:${i.type}${i.indexed ? ":idx" : ""}`)).toEqual([
+      "market:uint8:idx", "taker:address:idx", "acct:bytes32", "takerSold:bool", "size:uint128", "price:uint64", "discBps:uint256", "fee:uint256",
+    ]);
+  });
+});

@@ -141,3 +141,29 @@ def test_keepers_and_degraded_oracle(env, fund):
     assert ei.value.error_name == "OracleDegraded"
     assert not keeper.oracle_status(0).fresh
     env.set_oracle(P(50000))
+
+
+def test_backstop_phase2_config_poke_and_refusals(env, fund):
+    admin = env.client(0)
+    anyone = env.client(16)
+    assert anyone.backstop_cfg(0)["soft_notional"] == 0  # OFF until the admin enables a market
+    assert anyone.backstop_auction(0)["active"] is False
+    admin.set_backstop_cfg(0, 1_000_000 * 10**6, 200, 60, 600, 3600)
+    c = anyone.backstop_cfg(0)
+    assert (c["max_disc_bps"], c["dwell"], c["ramp"], c["max_age"], c["elevated_since"]) == (200, 60, 600, 3600, 0)
+    anyone.poke_backstop(0)  # flat backstop: nothing to start
+    assert anyone.backstop_cfg(0)["elevated_since"] == 0
+    taker = fund(19, 10_000)
+    with pytest.raises(Exception):
+        taker.take_backstop(0, 100_000, P(60000))  # not elevated / no inventory
+    with pytest.raises(Exception):
+        anyone.unwind_backstop([taker.acct()], 0)
+    admin.set_backstop_take_fee(5)
+    assert anyone.backstop_take_fee_bps() == 5
+    with pytest.raises(Exception):
+        anyone.set_backstop_take_fee(1)  # not admin/guardian
+    admin.set_backstop_place_open(False)
+    assert anyone.backstop_place_open() is False
+    admin.set_backstop_place_open(True)
+    admin.set_backstop_cfg(0, 0, 0, 0, 60, 60)
+    assert anyone.backstop_cfg(0)["soft_notional"] == 0

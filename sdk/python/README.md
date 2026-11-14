@@ -2,8 +2,8 @@
 
 web3.py + eth-account client. Same core surface as the TS SDK: deposits/withdraws/internal transfers, limit + market-as-IOC orders
 (slippage helper), cancel/cancel_all/replace, EIP-712 signed orders (`sign_order` + `place_signed`), agent keys, keeper calls
-(`liquidate`, `write_off`, `sync_backstop`, `backstop_equity`, `adl_health`, `principal`, `poke_funding`, `execute_conditional`), reads (`markets`, `mark_price`, `book_snapshot`, `account_state`, `positions`,
-`open_orders`, `oracle_status`, `get_fills`), tick/lot validation and custom-error decoding (`PerpError.error_name`).
+(`liquidate`, `write_off`, `sync_backstop`, `backstop_equity`, `adl_health`, `principal`, `poke_funding`, `poke_backstop`, `unwind_backstop`, `execute_conditional`), reads (`markets`, `mark_price`, `book_snapshot`, `account_state`, `positions`,
+`open_orders`, `oracle_status`, `get_fills`), backstop phase 2 (`take_backstop`, `backstop_auction`, `backstop_cfg`, `backstop_place_open`, `backstop_take_fee_bps`; admin `set_backstop_cfg`, `set_backstop_take_fee`, `set_backstop_place_open`; `BackstopCap` decodes to a plain message), tick/lot validation and custom-error decoding (`PerpError.error_name`).
 Raw units: price 1e6, size 1e8, USDC 1e6 (`to_price/to_size/to_usdc`).
 
 ```bash

@@ -233,3 +233,30 @@ export interface SignedOrder {
   /** address that produced the signature (owner or an approved agent) */
   signer: Address;
 }
+
+/** `backstopCfg(market)`: backstop Phase 2 inventory parameters. `softNotional == 0n` means the feature is off for that market. */
+export interface BackstopCfg {
+  /** inventory notional (micro-USDC) above which the market is "elevated" and the Dutch auction clock runs */
+  softNotional: bigint;
+  /** maximum auction discount (bps of index) */
+  maxDiscBps: number;
+  /** seconds elevated before the discount starts */
+  dwell: number;
+  /** seconds over which the discount ramps to `maxDiscBps` */
+  ramp: number;
+  /** seconds elevated before `unwindBackstop` becomes callable */
+  maxAge: number;
+  /** unix seconds the market became elevated; 0n = not elevated */
+  elevatedSince: bigint;
+}
+
+/** `backstopAuction(market)`: the current Dutch-auction quote. `takerSells`: the backstop is SHORT and the taker sells to it. */
+export interface BackstopAuction {
+  active: boolean;
+  takerSells: boolean;
+  /** price in 1e6 units, rounded in the backstop's favour */
+  price: bigint;
+  discBps: bigint;
+  /** whole backstop inventory (1e8 size units); a taker may take any lot-aligned part */
+  size: bigint;
+}

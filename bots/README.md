@@ -9,6 +9,7 @@ cd ../contracts && npx hardhat run scripts/deploy.js --network localhost
 cd ../bots && pnpm install
 pnpm oracle      # terminal 2: random-walk the ManualOracle (owner key = hardhat #0). Env: STEP_MS SIGMA_BPS REVERT MAX_DEV_PCT SEED MARKETS DURATION_SEC
 pnpm seed        # terminal 3: mint MockUSDC + deposit for 3 MM accounts (subs 0 and 1) + 1 taker, then start the bots (--no-start to skip; DURATION_SEC bounds it)
+pnpm backstop-taker  # backstop Phase 2 example: watches backstopAuction(market) and takes inventory when the Dutch-auction price beats the book after fee + MIN_EDGE_BPS (DRY RUN unless SEND=1; MARKET, MAX_SIZE, ROUNDS, POLL_MS); local chain only. NOT a keeper job: taking inventory is trading
 pnpm taker       # cross the book with IOC market orders (SIDE=buy|sell SIZE ROUNDS MARKET)
 pnpm status      # on-chain: oracle/mark, book top, MM equity/positions
 pnpm verify      # on-chain: Fill events, fills by the test taker, self-trade check

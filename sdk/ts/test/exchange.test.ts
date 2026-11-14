@@ -278,4 +278,29 @@ d("PerpClient against local node", () => {
     await admin.setWithdrawGate(toUsdc(100));
     await expect(keeper.setWithdrawGate(0n)).rejects.toBeTruthy(); // not admin/guardian
   });
+  it("backstop phase 2: config round trip, inactive auction, poke is a no-op, take/unwind refuse a market that is not elevated, guardian limits", async () => {
+    await env.setOracle(P(50000));
+    const admin = env.client(hhAccount(0));
+    const anyone = env.client(hhAccount(16));
+    const off = await anyone.backstopCfg(0);
+    expect(off.softNotional).toBe(0n); // feature is OFF until the admin enables a market
+    expect((await anyone.backstopAuction(0)).active).toBe(false);
+    await admin.setBackstopCfg(0, { softNotional: toUsdc(1_000_000), maxDiscBps: 200, dwell: 60, ramp: 600, maxAge: 3600 });
+    const c = await anyone.backstopCfg(0);
+    expect(c).toMatchObject({ softNotional: toUsdc(1_000_000), maxDiscBps: 200, dwell: 60, ramp: 600, maxAge: 3600, elevatedSince: 0n });
+    await anyone.pokeBackstop(0); // flat backstop: nothing to start
+    expect((await anyone.backstopCfg(0)).elevatedSince).toBe(0n);
+    expect((await anyone.backstopAuction(0)).active).toBe(false);
+    const taker = await fund(env, 19, toUsdc(10_000));
+    await expect(taker.takeBackstop(0, 100_000n, P(60000))).rejects.toBeTruthy(); // not elevated / no inventory
+    await expect(anyone.unwindBackstop([taker.acct()], 0)).rejects.toBeTruthy();
+    await admin.setBackstopTakeFee(5);
+    expect(await anyone.backstopTakeFeeBps()).toBe(5);
+    await expect(anyone.setBackstopTakeFee(1)).rejects.toBeTruthy(); // not admin/guardian
+    await admin.setBackstopPlaceOpen(false);
+    expect(await anyone.backstopPlaceOpen()).toBe(false);
+    await admin.setBackstopPlaceOpen(true);
+    await admin.setBackstopCfg(0, { softNotional: 0n, maxDiscBps: 0, dwell: 0, ramp: 60, maxAge: 60 }); // switch the market off again
+    expect((await anyone.backstopCfg(0)).softNotional).toBe(0n);
+  });
 });

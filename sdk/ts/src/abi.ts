@@ -21,6 +21,11 @@ export const exchangeAbi = [
   },
   {
     "type": "error",
+    "name": "BackstopCap",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadParam",
     "inputs": [
       {
@@ -165,6 +170,35 @@ export const exchangeAbi = [
   },
   {
     "type": "event",
+    "name": "BackstopElevated",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "notional",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BackstopRelaxed",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "BackstopSynced",
     "inputs": [
       {
@@ -195,6 +229,80 @@ export const exchangeAbi = [
       {
         "type": "uint256",
         "name": "repaidDebt",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BackstopTaken",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "taker",
+        "indexed": true
+      },
+      {
+        "type": "bytes32",
+        "name": "acct",
+        "indexed": false
+      },
+      {
+        "type": "bool",
+        "name": "takerSold",
+        "indexed": false
+      },
+      {
+        "type": "uint128",
+        "name": "size",
+        "indexed": false
+      },
+      {
+        "type": "uint64",
+        "name": "price",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "discBps",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "fee",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BackstopUnwound",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      },
+      {
+        "type": "bytes32",
+        "name": "target",
+        "indexed": true
+      },
+      {
+        "type": "uint128",
+        "name": "size",
+        "indexed": false
+      },
+      {
+        "type": "uint64",
+        "name": "price",
         "indexed": false
       }
     ],
@@ -1143,6 +1251,67 @@ export const exchangeAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "backstopCfg",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": ""
+      }
+    ],
+    "outputs": [
+      {
+        "type": "uint128",
+        "name": "softNotional"
+      },
+      {
+        "type": "uint16",
+        "name": "maxDiscBps"
+      },
+      {
+        "type": "uint32",
+        "name": "dwell"
+      },
+      {
+        "type": "uint32",
+        "name": "ramp"
+      },
+      {
+        "type": "uint32",
+        "name": "maxAge"
+      },
+      {
+        "type": "uint64",
+        "name": "elevatedSince"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "backstopPlaceOpen",
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "bool",
+        "name": ""
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "backstopTakeFeeBps",
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "uint32",
+        "name": ""
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -3273,6 +3442,67 @@ export const exchangeAbi = [
   },
   {
     "type": "event",
+    "name": "BackstopCfgSet",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      },
+      {
+        "type": "uint128",
+        "name": "softNotional",
+        "indexed": false
+      },
+      {
+        "type": "uint16",
+        "name": "maxDiscBps",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "dwell",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "ramp",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "maxAge",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BackstopPlaceOpenSet",
+    "inputs": [
+      {
+        "type": "bool",
+        "name": "open",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BackstopTakeFeeSet",
+    "inputs": [
+      {
+        "type": "uint32",
+        "name": "bps",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "DelistedSettled",
     "inputs": [
       {
@@ -3297,6 +3527,39 @@ export const exchangeAbi = [
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "function",
+    "name": "backstopAuction",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "bool",
+        "name": "active"
+      },
+      {
+        "type": "bool",
+        "name": "takerSells"
+      },
+      {
+        "type": "uint256",
+        "name": "price"
+      },
+      {
+        "type": "uint256",
+        "name": "discBps"
+      },
+      {
+        "type": "uint256",
+        "name": "size"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -3328,6 +3591,74 @@ export const exchangeAbi = [
   },
   {
     "type": "function",
+    "name": "pokeBackstop",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setBackstopCfg",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "m"
+      },
+      {
+        "type": "uint128",
+        "name": "soft"
+      },
+      {
+        "type": "uint16",
+        "name": "maxDisc"
+      },
+      {
+        "type": "uint32",
+        "name": "dwell"
+      },
+      {
+        "type": "uint32",
+        "name": "ramp"
+      },
+      {
+        "type": "uint32",
+        "name": "maxAge"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setBackstopPlaceOpen",
+    "inputs": [
+      {
+        "type": "bool",
+        "name": "open"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setBackstopTakeFee",
+    "inputs": [
+      {
+        "type": "uint32",
+        "name": "bps"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "settleDelisted",
     "inputs": [
       {
@@ -3346,6 +3677,34 @@ export const exchangeAbi = [
     "type": "function",
     "name": "syncBackstop",
     "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "takeBackstop",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "owner"
+      },
+      {
+        "type": "uint8",
+        "name": "sub"
+      },
+      {
+        "type": "uint8",
+        "name": "market"
+      },
+      {
+        "type": "uint128",
+        "name": "size"
+      },
+      {
+        "type": "uint64",
+        "name": "limitPx"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -3788,6 +4147,22 @@ export const exchangeAbi = [
       {
         "type": "uint256",
         "name": "amount"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "unwindBackstop",
+    "inputs": [
+      {
+        "type": "bytes32[]",
+        "name": "targets"
+      },
+      {
+        "type": "uint8",
+        "name": "market"
       }
     ],
     "outputs": [],

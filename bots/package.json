@@ -12,7 +12,8 @@
     "oracle": "tsx src/oracle-driver.ts",
     "taker": "tsx src/taker.ts",
     "status": "tsx src/status.ts",
-    "verify": "tsx src/verify.ts"
+    "verify": "tsx src/verify.ts",
+    "backstop-taker": "tsx src/backstop-taker.ts"
   },
   "dependencies": {
     "@perps/sdk": "link:../sdk/ts",

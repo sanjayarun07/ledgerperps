@@ -269,6 +269,46 @@ class PerpClient:
         """Admin: any value (2**256-1 disables the limiter); GUARDIAN: may only lower it. Micro-USDC."""
         return self._send(self.ex.functions.setWithdrawGate(threshold))
 
+    # ---- backstop phase 2 (inventory management)
+    def backstop_cfg(self, market: int) -> dict:
+        """Per-market inventory parameters; soft_notional == 0 means the feature is OFF for that market. elevated_since == 0 means not elevated."""
+        r = self._call(self.ex.functions.backstopCfg(market))
+        return {"soft_notional": int(r[0]), "max_disc_bps": int(r[1]), "dwell": int(r[2]), "ramp": int(r[3]), "max_age": int(r[4]), "elevated_since": int(r[5])}
+
+    def backstop_auction(self, market: int) -> dict:
+        """Current Dutch-auction quote: takerSells = the backstop is short and the taker sells to it. price 1e6 units, size 1e8 units. Inactive unless elevated."""
+        r = self._call(self.ex.functions.backstopAuction(market))
+        return {"active": bool(r[0]), "taker_sells": bool(r[1]), "price": int(r[2]), "disc_bps": int(r[3]), "size": int(r[4])}
+
+    def backstop_place_open(self) -> bool:
+        return bool(self._call(self.ex.functions.backstopPlaceOpen()))
+
+    def backstop_take_fee_bps(self) -> int:
+        return int(self._call(self.ex.functions.backstopTakeFeeBps()))
+
+    def poke_backstop(self, market: int):
+        """Permissionless: refresh the market's elevation clock with the current mark (starts/stops the auction). Emits BackstopElevated/BackstopRelaxed."""
+        return self._send(self.ex.functions.pokeBackstop(market))
+
+    def take_backstop(self, market: int, size: int, limit_px: int, sub: Optional[int] = None):
+        """Take `size` (lot-aligned) of the backstop's inventory at the auction price (max price when buying, min when selling). Pays the take fee
+        into insurance; needs initial margin if exposure grows. Emits BackstopTaken (no Fill event)."""
+        return self._send(self.ex.functions.takeBackstop(self.owner, self.sub if sub is None else sub, market, size, limit_px))
+
+    def unwind_backstop(self, targets: list, market: int):
+        """Permissionless, after max_age of elevation: closes ranked (adlScore desc, key asc, max 8) profitable opposite-side accounts at mark."""
+        return self._send(self.ex.functions.unwindBackstop(targets, market))
+
+    def set_backstop_cfg(self, market: int, soft_notional: int, max_disc_bps: int, dwell: int, ramp: int, max_age: int):
+        """Admin: any bounded value; GUARDIAN: may only tighten an enabled market. soft_notional=0 turns the market's phase 2 off."""
+        return self._send(self.ex.functions.setBackstopCfg(market, soft_notional, max_disc_bps, dwell, ramp, max_age))
+
+    def set_backstop_take_fee(self, bps: int):
+        return self._send(self.ex.functions.setBackstopTakeFee(bps))
+
+    def set_backstop_place_open(self, is_open: bool):
+        return self._send(self.ex.functions.setBackstopPlaceOpen(is_open))
+
     def poke_funding(self, market: int):
         return self._send(self.ex.functions.pokeFunding(market))
 

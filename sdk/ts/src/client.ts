@@ -21,6 +21,8 @@ import {
   MarketState,
   Tif,
   type AccountState,
+  type BackstopAuction,
+  type BackstopCfg,
   type BookSnapshot,
   type Conditional,
   type Deployment,
@@ -489,6 +491,42 @@ export class PerpClient {
     return d > t;
   }
 
+  // ------------------------------------------------------------------ backstop phase 2 (inventory management)
+  /** Per-market inventory parameters. `softNotional === 0n` = feature off for that market. */
+  async backstopCfg(market: number): Promise<BackstopCfg> {
+    const r = await this.read<readonly [bigint, number, number, number, number, bigint]>("backstopCfg", [market]);
+    return { softNotional: r[0], maxDiscBps: Number(r[1]), dwell: Number(r[2]), ramp: Number(r[3]), maxAge: Number(r[4]), elevatedSince: r[5] };
+  }
+  /** Current Dutch-auction quote for the backstop's inventory (inactive unless elevated). Read-only. */
+  async backstopAuction(market: number): Promise<BackstopAuction> {
+    const r = await this.read<readonly [boolean, boolean, bigint, bigint, bigint]>("backstopAuction", [market]);
+    return { active: r[0], takerSells: r[1], price: r[2], discBps: r[3], size: r[4] };
+  }
+  /** Whether the discretionary `backstopPlace` is open (guardian can close it, only admin reopens). */
+  async backstopPlaceOpen(): Promise<boolean> {
+    return this.read("backstopPlaceOpen");
+  }
+  /** Taker fee on `takeBackstop`, bps of notional, paid into insurance. */
+  async backstopTakeFeeBps(): Promise<number> {
+    return Number(await this.read<number>("backstopTakeFeeBps"));
+  }
+  /** Permissionless: refresh the market's elevation clock with the current mark (starts/stops the auction). Emits `BackstopElevated` / `BackstopRelaxed`. */
+  async pokeBackstop(market: number): Promise<TxResult> {
+    return (await this.send("pokeBackstop", [market])).result;
+  }
+  /**
+   * Permissionless: take `size` (lot-aligned) of the backstop's inventory in an elevated market at the auction price. The taker sells when the
+   * backstop is short and buys when it is long; `limitPx` is the worst acceptable price (max when buying, min when selling). Pays
+   * `backstopTakeFeeBps` into insurance and must pass the initial-margin check if exposure grows. Emits `BackstopTaken` (no Fill event).
+   */
+  async takeBackstop(market: number, size: bigint, limitPx: bigint, o: TxOptions = {}): Promise<TxResult> {
+    return (await this.send("takeBackstop", [this.owner, o.sub ?? this.defaultSub, market, size, limitPx], o)).result;
+  }
+  /** Permissionless, after `maxAge` of elevation: close ranked (adlScore desc, key asc, max 8) profitable opposite-side accounts at mark. Emits `BackstopUnwound` per target. */
+  async unwindBackstop(targets: readonly Hex[], market: number): Promise<TxResult> {
+    return (await this.send("unwindBackstop", [targets, market])).result;
+  }
+
   // ------------------------------------------------------------------ admin (role-gated; included for local demos/ops)
   async setMarketState(market: number, state: MarketState): Promise<TxResult> {
     return (await this.send("setMarketState", [market, state])).result;
@@ -497,6 +535,18 @@ export class PerpClient {
   /** Admin (DEFAULT_ADMIN_ROLE) may set any value <= 10000; the GUARDIAN may only LOWER it. Ceiling on the ADL premium while backstop debt is outstanding. */
   async setAdlHardPremBps(bps: number): Promise<TxResult> {
     return (await this.send("setAdlHardPremBps", [bps])).result;
+  }
+  /** Admin: any bounded value; GUARDIAN: may only tighten an enabled market (every field <= current, softNotional > 0). `softNotional = 0n` turns the market's phase 2 off. */
+  async setBackstopCfg(market: number, c: Omit<BackstopCfg, "elevatedSince">): Promise<TxResult> {
+    return (await this.send("setBackstopCfg", [market, c.softNotional, c.maxDiscBps, c.dwell, c.ramp, c.maxAge])).result;
+  }
+  /** Admin: 0..10 bps; GUARDIAN: may only lower. */
+  async setBackstopTakeFee(bps: number): Promise<TxResult> {
+    return (await this.send("setBackstopTakeFee", [bps])).result;
+  }
+  /** Admin may open or close `backstopPlace`; GUARDIAN may only close it. */
+  async setBackstopPlaceOpen(open: boolean): Promise<TxResult> {
+    return (await this.send("setBackstopPlaceOpen", [open])).result;
   }
   /** Admin: any value (max uint256 disables the limiter). GUARDIAN: may only LOWER (tighten) it. Micro-USDC. */
   async setWithdrawGate(threshold: bigint): Promise<TxResult> {

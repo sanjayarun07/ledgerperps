@@ -27,3 +27,12 @@ describe("WithdrawGated", () => {
     expect(d.message).toMatch(/temporarily limited while the exchange has unresolved bad debt/);
   });
 });
+
+describe("BackstopCap", () => {
+  it("decodes to a named error with a plain message", () => {
+    const data = encodeErrorResult({ abi: exchangeAbi, errorName: "BackstopCap" });
+    const d = decodePerpError({ raw: data })!;
+    expect(d.errorName).toBe("BackstopCap");
+    expect(d.message).toMatch(/backstop already holds/i);
+  });
+});

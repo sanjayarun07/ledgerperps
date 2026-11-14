@@ -63,3 +63,22 @@ def test_backstop_phase1_abi_and_gated_message():
     assert {e["name"] for e in abi if e["type"] == "event"} >= {"BackstopSynced", "AdlSkipped", "AdlHardPremSet", "WithdrawGateSet"}
     assert any(e["type"] == "error" and e["name"] == "WithdrawGated" for e in abi)
     assert "temporarily limited while the exchange has unresolved bad debt" in _HUMAN["WithdrawGated"]
+
+
+def test_abi_carries_backstop_phase2_surface():
+    import json
+    import pathlib
+
+    from perps_sdk.errors import _HUMAN
+
+    abi = json.loads((pathlib.Path(__file__).resolve().parents[1] / "src" / "perps_sdk" / "abi" / "exchange.json").read_text())
+    assert len(abi) == 199
+    fns = {f["name"]: f for f in abi if f["type"] == "function"}
+    for n in ["backstopAuction", "backstopCfg", "backstopPlaceOpen", "backstopTakeFeeBps", "pokeBackstop", "setBackstopCfg", "setBackstopPlaceOpen", "setBackstopTakeFee", "takeBackstop", "unwindBackstop"]:
+        assert n in fns, n
+    assert [o["type"] for o in fns["backstopAuction"]["outputs"]] == ["bool", "bool", "uint256", "uint256", "uint256"]
+    assert [i["type"] for i in fns["takeBackstop"]["inputs"]] == ["address", "uint8", "uint8", "uint128", "uint64"]
+    assert [i["type"] for i in fns["unwindBackstop"]["inputs"]] == ["bytes32[]", "uint8"]
+    assert {e["name"] for e in abi if e["type"] == "event"} >= {"BackstopCfgSet", "BackstopElevated", "BackstopPlaceOpenSet", "BackstopRelaxed", "BackstopTakeFeeSet", "BackstopTaken", "BackstopUnwound"}
+    assert any(e["type"] == "error" and e["name"] == "BackstopCap" for e in abi)
+    assert "backstop already holds" in _HUMAN["BackstopCap"]
