@@ -1,0 +1,19 @@
+{
+  "name": "Nova Perps",
+  "shortName": "Nova",
+  "tagline": "A fictional white-label demo brand",
+  "accent": "#e0457b",
+  "neutral": "slate",
+  "font": "humanist",
+  "radius": "sharp",
+  "density": "compact",
+  "defaultTheme": "dark",
+  "links": { "docs": "https://example.com/nova/docs", "support": "https://example.com/nova/support", "terms": "https://example.com/nova/terms" },
+  "social": [{ "label": "Community", "url": "https://example.com/nova/community" }],
+  "footerText": "Nova Perps is a fictional demo brand used to show white-labelling.",
+  "disclaimer": { "extra": "Nova demo tenant: nothing here is a real product." },
+  "copy": { "welcomeTitle": "Welcome to Nova", "welcomeBody": "Practice perpetual futures with mock money. Take a one-minute tour, then place your first trade." },
+  "features": { "twap": false, "agentKeys": false, "commandPalette": true, "leaderboard": false },
+  "markets": { "order": [1, 0] },
+  "integrations": { "collateral": { "label": "USDC", "decimals": 6 }, "analytics": { "enabled": false } }
+}

@@ -1,0 +1,60 @@
+{
+  "data": [
+    {
+      "block": 98,
+      "log_index": 1,
+      "maker": "0x18bbf5fcf8fe870ecff419c4677497c08b2e6a5431bb94541d06c9da3f308e55",
+      "maker_fee": "50040",
+      "maker_order_id": 4,
+      "market": 0,
+      "notional": "500400000",
+      "price": "50040000000",
+      "size": "1000000",
+      "taker": "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101",
+      "taker_fee": "250200",
+      "taker_order_id": 52,
+      "taker_side": "buy",
+      "trade_id": "15",
+      "ts": 1794573897,
+      "tx_hash": "0x61e6b027b8aa4724200dc221233b59f92febd9535b1fd0cd730304955c80981c"
+    },
+    {
+      "block": 84,
+      "log_index": 3,
+      "maker": "0x18bbf5fcf8fe870ecff419c4677497c08b2e6a5431bb94541d06c9da3f308e55",
+      "maker_fee": "200160",
+      "maker_order_id": 4,
+      "market": 0,
+      "notional": "2001600000",
+      "price": "50040000000",
+      "size": "4000000",
+      "taker": "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101",
+      "taker_fee": "1000800",
+      "taker_order_id": 49,
+      "taker_side": "buy",
+      "trade_id": "14",
+      "ts": 1794570167,
+      "tx_hash": "0x2bfb9193cea1b72fe10a1fe38f894d4e52a1190365edd437bbb1aced12268dd7"
+    },
+    {
+      "block": 84,
+      "log_index": 2,
+      "maker": "0x18bbf5fcf8fe870ecff419c4677497c08b2e6a5431bb94541d06c9da3f308e55",
+      "maker_fee": "300120",
+      "maker_order_id": 2,
+      "market": 0,
+      "notional": "3001200000",
+      "price": "50020000000",
+      "size": "6000000",
+      "taker": "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101",
+      "taker_fee": "1500600",
+      "taker_order_id": 49,
+      "taker_side": "buy",
+      "trade_id": "13",
+      "ts": 1794570167,
+      "tx_hash": "0x2bfb9193cea1b72fe10a1fe38f894d4e52a1190365edd437bbb1aced12268dd7"
+    }
+  ],
+  "indexed_block": 98,
+  "next_cursor": "5400000002"
+}

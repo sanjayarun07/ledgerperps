@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "block": 93,
+      "intervals": "1",
+      "log_index": 0,
+      "market": 0,
+      "new_index": "0",
+      "rate": "0",
+      "ts": 1794573882
+    }
+  ],
+  "indexed_block": 98,
+  "next_cursor": null
+}

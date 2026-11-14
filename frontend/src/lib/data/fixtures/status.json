@@ -1,0 +1,31 @@
+{
+  "data": {
+    "canonical_execution": {
+      "block": 98,
+      "note": "latest block as executed by the L2 node; subject to reorg until the node's own reorg window has passed",
+      "source": "rpc_latest",
+      "timestamp": 1794573897
+    },
+    "chain_head": 98,
+    "chain_id": 31337,
+    "disclaimer": "Derived from chain events by an unaudited indexer. Never authoritative for balances or margin: verify against the contract.",
+    "events_indexed": 118,
+    "exchange": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+    "halted": null,
+    "indexed_head": {
+      "hash": "0x97fe484cab83e69821473cc3892a3df969e4d5898f5ffd5f8e52b67de41ad36a",
+      "number": 98,
+      "timestamp": 1794573897
+    },
+    "lag_blocks": 0,
+    "parent_chain_finality": {
+      "block": null,
+      "reason": "not available: local/dev chain has no parent chain, and this indexer does not read batch posting or finality data",
+      "status": "unknown"
+    },
+    "reorgs_handled": 0,
+    "rpc_finalized_block": 98,
+    "schema_version": 1,
+    "synced": true
+  }
+}

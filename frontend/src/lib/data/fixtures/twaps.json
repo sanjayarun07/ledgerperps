@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "acct": "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101",
+      "created_block": 89,
+      "created_ts": 1794570172,
+      "filled": "0",
+      "id": 1,
+      "interval_secs": 30,
+      "market": 2,
+      "reduce_only": false,
+      "side": "buy",
+      "slice_log": [],
+      "slices": 3,
+      "slices_done": 0,
+      "slices_failed": 0,
+      "slippage_bps": 200,
+      "status": "active",
+      "total": "500000000",
+      "updated_block": 89
+    }
+  ],
+  "indexed_block": 98,
+  "next_cursor": null
+}

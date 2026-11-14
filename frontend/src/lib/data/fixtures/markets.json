@@ -1,0 +1,95 @@
+{
+  "data": [
+    {
+      "config": {
+        "funding_interval": 3600,
+        "lot": 10000,
+        "max_oi": "10000000000000",
+        "max_order_size": "1000000000000",
+        "min_notional": 10000000,
+        "name": "BTC-USD",
+        "tick": 100000
+      },
+      "funding_index": "0",
+      "funding_rate": "0",
+      "id": 0,
+      "last_funding_ts": 1794573882,
+      "last_price": "50040000000",
+      "name": "BTC-USD",
+      "open_interest": "15000000",
+      "state": 0,
+      "state_name": "normal",
+      "stats_24h": {
+        "high": "50040000000",
+        "low": "49980000000",
+        "open": "50020000000",
+        "volume_base": "19000000",
+        "volume_quote": "9503200000"
+      },
+      "trade_count": 7,
+      "volume_base": "19000000",
+      "volume_quote": "9503200000"
+    },
+    {
+      "config": {
+        "funding_interval": 3600,
+        "lot": 100000,
+        "max_oi": "10000000000000",
+        "max_order_size": "1000000000000",
+        "min_notional": 10000000,
+        "name": "ETH-USD",
+        "tick": 10000
+      },
+      "funding_index": "0",
+      "funding_rate": "0",
+      "id": 1,
+      "last_funding_ts": null,
+      "last_price": "2998800000",
+      "name": "ETH-USD",
+      "open_interest": "40000000",
+      "state": 0,
+      "state_name": "normal",
+      "stats_24h": {
+        "high": "3001200000",
+        "low": "2998800000",
+        "open": "3001200000",
+        "volume_base": "80000000",
+        "volume_quote": "2400000000"
+      },
+      "trade_count": 4,
+      "volume_base": "80000000",
+      "volume_quote": "2400000000"
+    },
+    {
+      "config": {
+        "funding_interval": 3600,
+        "lot": 1000000,
+        "max_oi": "10000000000000",
+        "max_order_size": "1000000000000",
+        "min_notional": 10000000,
+        "name": "SOL-USD",
+        "tick": 1000
+      },
+      "funding_index": "0",
+      "funding_rate": "0",
+      "id": 2,
+      "last_funding_ts": null,
+      "last_price": "149900000",
+      "name": "SOL-USD",
+      "open_interest": "400000000",
+      "state": 0,
+      "state_name": "normal",
+      "stats_24h": {
+        "high": "150100000",
+        "low": "149900000",
+        "open": "150100000",
+        "volume_base": "800000000",
+        "volume_quote": "1200000000"
+      },
+      "trade_count": 4,
+      "volume_base": "800000000",
+      "volume_quote": "1200000000"
+    }
+  ],
+  "indexed_block": 98
+}

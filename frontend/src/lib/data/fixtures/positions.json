@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "acct": "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101",
+      "approximate": false,
+      "basis": "550320000000000000",
+      "entry_price": "50029090909",
+      "fees_paid": "2751600",
+      "funding_paid": "0",
+      "market": 0,
+      "realized_pnl": "0",
+      "size": "11000000",
+      "updated_block": 98
+    }
+  ],
+  "indexed_block": 98
+}

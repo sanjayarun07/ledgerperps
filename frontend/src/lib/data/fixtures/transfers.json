@@ -1,0 +1,42 @@
+{
+  "data": [
+    {
+      "acct": "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101",
+      "amount": "500000000",
+      "block": 91,
+      "counterparty": null,
+      "from_address": null,
+      "kind": "withdraw",
+      "log_index": 1,
+      "market": null,
+      "ts": 1794570174,
+      "tx_hash": "0xc99267057258d1014629455b108370326132e36482f1d7fdc2170ace2c1628d7"
+    },
+    {
+      "acct": "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101",
+      "amount": "1000000000",
+      "block": 90,
+      "counterparty": "0x3c8e904cdb19937d60d41c8d984b1a8803ad6e0891b4f9e032dcec2a22c2c7f5",
+      "from_address": null,
+      "kind": "internal_transfer",
+      "log_index": 0,
+      "market": null,
+      "ts": 1794570173,
+      "tx_hash": "0xf2353561ff2ad60911644873e690de4d6c828a3287d88c4804caf3a776d901ca"
+    },
+    {
+      "acct": "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101",
+      "amount": "50000000000",
+      "block": 83,
+      "counterparty": null,
+      "from_address": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+      "kind": "deposit",
+      "log_index": 1,
+      "market": null,
+      "ts": 1794570166,
+      "tx_hash": "0x16f35e0e6f9cd07d192933a970d0015ad18da849c230252ac5a07f0c75c05939"
+    }
+  ],
+  "indexed_block": 98,
+  "next_cursor": null
+}

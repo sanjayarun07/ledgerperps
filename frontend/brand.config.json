@@ -1,0 +1,19 @@
+{
+  "name": "Ledgerline",
+  "shortName": "Ledgerline",
+  "tagline": "Perpetual futures on a chain you can read",
+  "accent": "#2fcb73",
+  "neutral": "ink",
+  "font": "system",
+  "radius": "default",
+  "density": "comfortable",
+  "defaultTheme": "dark",
+  "links": {},
+  "social": [],
+  "footerText": "",
+  "disclaimer": { "extra": "" },
+  "copy": {},
+  "features": {},
+  "markets": { "order": [0, 1, 2] },
+  "integrations": { "collateral": { "label": "USDC", "decimals": 6 }, "analytics": { "enabled": false } }
+}

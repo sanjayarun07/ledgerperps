@@ -1,0 +1,111 @@
+[
+  {
+    "acct": null,
+    "channel": "book",
+    "interval": null,
+    "market": 0,
+    "type": "subscribed"
+  },
+  {
+    "asks": [
+      [
+        "50040000000",
+        "15000000"
+      ],
+      [
+        "50060000000",
+        "30000000"
+      ],
+      [
+        "50080000000",
+        "40000000"
+      ],
+      [
+        "50100000000",
+        "50000000"
+      ],
+      [
+        "50120000000",
+        "60000000"
+      ]
+    ],
+    "bids": [
+      [
+        "49980000000",
+        "6000000"
+      ],
+      [
+        "49960000000",
+        "20000000"
+      ],
+      [
+        "49940000000",
+        "30000000"
+      ],
+      [
+        "49920000000",
+        "40000000"
+      ],
+      [
+        "49900000000",
+        "50000000"
+      ],
+      [
+        "49880000000",
+        "60000000"
+      ]
+    ],
+    "channel": "book",
+    "market": 0,
+    "seq": 21,
+    "type": "snapshot"
+  },
+  {
+    "acct": null,
+    "channel": "trades",
+    "interval": null,
+    "market": 0,
+    "type": "subscribed"
+  },
+  {
+    "channel": "book",
+    "market": 0,
+    "price": "50200000000",
+    "seq": 22,
+    "side": "ask",
+    "size": "2000000",
+    "type": "delta"
+  },
+  {
+    "channel": "book",
+    "market": 0,
+    "price": "50040000000",
+    "seq": 23,
+    "side": "ask",
+    "size": "14000000",
+    "type": "delta"
+  },
+  {
+    "channel": "trades",
+    "data": {
+      "block": 100,
+      "log_index": 1,
+      "maker": "0x18bbf5fcf8fe870ecff419c4677497c08b2e6a5431bb94541d06c9da3f308e55",
+      "maker_fee": "50040",
+      "maker_order_id": 4,
+      "market": 0,
+      "notional": "500400000",
+      "price": "50040000000",
+      "size": "1000000",
+      "taker": "0x14e04a66bf74771820a7400ff6cf065175b3d7eb25805a5bd1633b161af5d101",
+      "taker_fee": "250200",
+      "taker_order_id": 54,
+      "taker_side": "buy",
+      "trade_id": "16",
+      "ts": 1794573910,
+      "tx_hash": "0x68bf4c5ad2ef16abea4fffb1ae65ade9fa681bee2f1ab78a61f323eae1fcd103"
+    },
+    "market": 0,
+    "type": "trade"
+  }
+]
