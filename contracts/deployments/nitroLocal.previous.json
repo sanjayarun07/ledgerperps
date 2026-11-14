@@ -1,0 +1,17 @@
+{
+  "env": "LOCAL-DEMO (mock USDC, manual oracle)",
+  "chainId": 412346,
+  "usdc": "0x11B57FE348584f042E436c6Bf7c3c3deF171de49",
+  "oracle": "0x1294b86822ff4976BfE136cB06CF43eC7FCF2574",
+  "exchange": "0xA6E41fFD769491a42A6e5Ce453259b93983a22EF",
+  "feeds": {
+    "BTC-USD": "0xb39c402b9bd8428ba7a4cc2d1aca1432756cddeb60941a9175541a819095269e",
+    "ETH-USD": "0x2430f68ea2e8d4151992bb7fc3a4c472087a6149bf7e0232704396162ab7c1f7",
+    "SOL-USD": "0xc8f26e6a5357088b86b9152126f5617eacfdd451083ac8200098aa83564c11f5"
+  },
+  "marketIds": {
+    "BTC-USD": 0,
+    "ETH-USD": 1,
+    "SOL-USD": 2
+  }
+}

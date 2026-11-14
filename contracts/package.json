@@ -1,0 +1,15 @@
+{
+  "name": "perps-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "5.0.0",
+    "@openzeppelin/contracts": "5.1.0",
+    "fast-check": "4.10.2",
+    "hardhat": "2.22.17"
+  }
+}
