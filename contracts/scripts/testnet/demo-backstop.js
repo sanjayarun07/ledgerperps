@@ -66,7 +66,11 @@ async function run({ d, chainId, signers, gate, out, checkDeployer, local = fals
     console.log(`    [chain] ${JSON.stringify(st)}`);
     return st;
   }
+  // DEMO_RESUME=yes: continue an interrupted run (positions open, price already 90, backstop holds inventory): skips setup/open/liquidate/sync, still takes, pokes, restores price and withdraws.
+  const RESUME = env.DEMO_RESUME === "yes"; if (RESUME) priceChanged = true;
+  const EARLY = ["set demo price to 100", "approve USDC", "deposit ", "short side rests", "long side buys", "liquidate the long", "syncBackstop"];
   async function stage(name, fn) {
+    if (RESUME && EARLY.some((e) => name.startsWith(e))) return null;
     if (aborted) { stages.push({ name, status: "skipped", reason: aborted }); return null; }
     const s = { name, status: "ok" };
     console.log(`\n> ${name}`);
@@ -106,7 +110,7 @@ async function run({ d, chainId, signers, gate, out, checkDeployer, local = fals
     if (live && pre.usdc < need) throw new Error(`keeper USDC ${fmt6(pre.usdc)} < ${fmt6(need)} needed (faucet: ${cfg.usdc.faucet})`);
     if (live && t2) { const b2 = await usdc.balanceOf(t2.address); if (b2 < DEPOSIT) throw new Error(`trader2 USDC ${fmt6(b2)} < ${fmt6(DEPOSIT)}`); }
     s.state = await readState("before");
-    if (s.state.auction.active || s.state.backstopSize !== "0.0000") throw new Error("the demo market already has backstop inventory; wait for it to clear or use a fresh deployment");
+    if (!RESUME && (s.state.auction.active || s.state.backstopSize !== "0.0000")) throw new Error("the demo market already has backstop inventory; wait for it to clear or use a fresh deployment");
   });
   if (!live) {
     console.log("\nPlan (live, ~16 transactions): set price 100 -> approve + deposit x2 (" + fmt6(DEPOSIT) + " USDC each) -> short rests 0.5 @100, long buys it (IOC) -> set price 90 -> liquidate long ->");
