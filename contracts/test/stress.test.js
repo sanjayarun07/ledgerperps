@@ -322,6 +322,13 @@ async function underwater(c) {
   return out;
 }
 
+// P12 attribution: new backstop debt recorded inside a call that names a market is booked on THAT market
+function attrCheck(c, evs, m, label) {
+  for (const e of evs) if (e.name === "BackstopSynced" && e.args.toDebt > 0n) {
+    bump("p12-debt-sync");
+    if (Number(e.args.market) !== m) viol(c, "P12", `${label}: backstop debt ${e.args.toDebt} booked on market ${Number(e.args.market)} but the call acted on market ${m}`);
+  }
+}
 async function doLiquidate(c, kIdx, a, m, label) {
   await ensureFresh(c);
   const pre = c.st;
@@ -341,6 +348,7 @@ async function doLiquidate(c, kIdx, a, m, label) {
   }
   if (exp.kind === "StaleUnrelated") exp = { kind: "Success" };
   if (exp.kind !== "Success") viol(c, "P5", `${label}: liquidation SUCCEEDED but expected ${exp.kind}${exp.eq !== undefined ? ` (eq=${exp.eq} >= mm=${exp.mm})` : ""}`);
+  attrCheck(c, res.evs, m, label);
   const L = res.evs.find((e) => e.name === "Liquidated").args;
   c.keeperOf = s.address;
   const sz = L.size, v0 = pre.pos.get(a)[m], v1 = post.pos.get(a)[m];
@@ -407,6 +415,7 @@ async function doAdl(c, kIdx, m, mode, cnt, label) {
     checkCore(c, post, label + " [reverted]");
     return { ok: false };
   }
+  attrCheck(c, res.evs, m, label);
   // P7: debt never increases, targets keep break-even, ranking respected, only opposite-to-backstop
   const syBad = res.evs.filter((e) => e.name === "BackstopSynced").reduce((x, e) => x + e.args.toDebt, 0n);
   const clearedTx = res.evs.filter((e) => e.name === "AdlExecuted").reduce((x, e) => x + e.args.debtCleared, 0n);
@@ -637,7 +646,7 @@ async function runStep(c, s, idx) {
         if (r.err.name === "BadParam" && q.active && size <= abs(bs)) bump("take-reverted-while-active:" + r.err.args[0]);
         return;
       }
-      const T = r.evs.find((e) => e.name === "BackstopTaken").args; bump("bstake-ok");
+      const T = r.evs.find((e) => e.name === "BackstopTaken").args; bump("bstake-ok"); attrCheck(c, r.evs, m, label);
       const post = await readState(c); c.st = post;
       const cfg = await c.ex.backstopCfg(m);
       const bsAfter = post.pos.get(BACKSTOP)[m].size;
@@ -661,7 +670,7 @@ async function runStep(c, s, idx) {
         if (!["BadParam", "MarketRestricted", "OracleDegraded"].includes(r.err.name)) throw new Viol("P0", `${label}: unexpected unwind revert ${errStr(r.err)}`);
         return;
       }
-      bump("bsforce-ok");
+      bump("bsforce-ok"); attrCheck(c, r.evs, m, label);
       const post = await readState(c); c.st = post; const mark = post.mark[m];
       for (const U of r.evs.filter((e) => e.name === "BackstopUnwound")) if (U.args.price !== mark) viol(c, "P2f", `${label}: unwind price ${U.args.price} != mark ${mark} (no concession allowed)`);
       const bsAfter = post.pos.get(BACKSTOP)[m].size;
@@ -926,7 +935,7 @@ function fuzzGroup(id, title, fatal) {
 
 describe("stress: liquidation / bad debt / insurance / backstop / ADL under large price gaps", function () {
   this.timeout(TIMEOUT);
-  fuzzGroup("A", "structural: P1 net position, P2 exact ledger identity, P3a debt==sum(adlDebt), P4 bucket isolation, P5 liquidation correctness, P7 ADL, P8 insurance, P0 no panic", ["P0", "P1", "P2", "P3a", "P4", "P5", "P7", "P7x", "P8", "P11"]);
+  fuzzGroup("A", "structural: P1 net position, P2 exact ledger identity, P3a debt==sum(adlDebt), P4 bucket isolation, P5 liquidation correctness, P7 ADL, P8 insurance, P0 no panic", ["P0", "P1", "P2", "P3a", "P4", "P5", "P7", "P7x", "P8", "P11", "P12"]);
   fuzzGroup("D", "funding conservation incl. BACKSTOP (fundingPool + pending funding == rounding residue)", ["P0", "FUND"]);
   fuzzGroup("B", "liveness P10: underwater positions are always liquidatable; keeper loop terminates", ["P0", "P10"]);
   fuzzGroup("C", "physical solvency P3 at flat (balance >= positive claims - unresolvedBadDebt)", ["P0", "P3"]);
@@ -1513,6 +1522,84 @@ describe("stress: deterministic worst cases and findings", function () {
     const r = await (await take(c, 2, btc(0.1), usd(59000))).wait();
     const usdcAddr = (await c.usdc.getAddress()).toLowerCase();
     expect(r.logs.filter((l) => l.address.toLowerCase() === usdcAddr).length).to.equal(0);
+  });
+
+  // =========================================================== PHASE 2b: debt attribution (found on the live demo, market id 3)
+  const adlArr = async (c) => { const o = []; for (let m = 0; m < NM; m++) o.push(await c.ex.adlDebt(m)); return o; };
+  async function expectAttributed(c, m, label) {
+    const a = await adlArr(c); const st = await rd(c);
+    log(label, "adlDebt", a.map(usdStr).join(","), "ubd", usdStr(st.ubd), "bsDebt", usdStr(st.bsDebt), "bsIns", usdStr(st.bsIns));
+    for (let j = 0; j < NM; j++) if (j !== m) expect(a[j], `${label}: adlDebt[${j}]`).to.equal(0n);
+    expect(a[m], `${label}: adlDebt[${m}]`).to.be.gt(0n);
+    expect(a.reduce((x, y) => x + y, 0n)).to.equal(st.ubd);
+    expect(st.bsDebt <= st.ubd).to.equal(true);
+  }
+  const SOL = 2, sol = btc;
+  // t0 long `size` SOL @150 (6.5k), liquidated at 89 while the price is held: the backstop gets a long (price held, no deficit yet)
+  async function solLong(cfg = true) {
+    const c = await mkCtx([6500, 100000, 100000, 6500, 100000, 100000]); await FEES_FULL(c);
+    if (cfg) { await c.ex.setBackstopCfg(SOL, usd(1000), 200, 60, 600, 1200); await c.ex.setBackstopTakeFee(0); }
+    await pair(c, 0, 1, SOL, sol(100), usd(150));
+    await setPx(c, SOL, usd(89));
+    await c.ex.connect(c.actors[7]).liquidate(c.keys[0], SOL);
+    return c;
+  }
+
+  itF("ATTR-1 (demo): long liquidated into the backstop at mark on market id 2, taken at a discount: the loss is booked on market 2, not 0", async () => {
+    const c = await solLong();
+    const st0 = await rd(c); expect(st0.ubd).to.equal(0n);
+    const bs = (await c.ex.positions(BACKSTOP, SOL)).size; expect(bs > 0n).to.equal(true);
+    await advance(c, 2000);                                           // full 200 bps discount; price held at 89
+    await c.ex.connect(c.actors[2]).takeBackstop(c.actors[2].address, 0, SOL, bs, usd(1000));
+    expect((await c.ex.positions(BACKSTOP, SOL)).size).to.equal(0n);  // flat: the old code defaulted attribution to market 0
+    const st = await rd(c); expect(st.ubd > 0n).to.equal(true);       // insurance (liquidation fee share) is smaller than the loss
+    expect(st.ins).to.equal(0n);
+    await expectAttributed(c, SOL, "demo");
+    // a later permissionless sync (backstop flat, nothing new) neither moves nor re-books the debt
+    await sync(c); await expectAttributed(c, SOL, "demo+sync");
+  });
+
+  itF("ATTR-2: liquidate with a backstop deficit realised on the liquidated market (backstop short bought back by a liquidated long)", async () => {
+    const c = await mkCtx([6500, 100000, 100000, 6500, 100000, 100000]); await FEES_FULL(c);
+    await pair(c, 1, 0, SOL, sol(100), usd(150));                    // t0 SHORT 100 SOL
+    await setPx(c, SOL, usd(210));
+    await c.ex.connect(c.actors[7]).liquidate(c.keys[0], SOL);       // backstop short @210
+    const X = -(await c.ex.positions(BACKSTOP, SOL)).size; expect(X > 0n).to.equal(true);
+    await setPx(c, SOL, usd(400));
+    await pair(c, 3, 2, SOL, X, usd(400)); // t3 long X @400 (6.5k collateral)
+    await setPx(c, SOL, usd(340));
+    expect(await c.ex.adlDebt(0) + await c.ex.adlDebt(1) + await c.ex.adlDebt(2)).to.equal(0n);
+    await c.ex.connect(c.actors[7]).liquidate(c.keys[3], SOL);       // backstop buys back X: flat, realised loss ~ X x 130
+    expect((await c.ex.positions(BACKSTOP, SOL)).size).to.equal(0n);
+    await expectAttributed(c, SOL, "liquidate");
+  });
+
+  itF("ATTR-3: unwindBackstop realises the loss at mark on its market and books it there", async () => {
+    const c = await solLong();
+    await c.ex.pokeBackstop(SOL);
+    await c.ex.setBackstopCfg(SOL, 1, 200, 60, 600, 1200);            // threshold ~0: unwind takes the whole inventory
+    await advance(c, 1300);
+    await c.ex.pokeBackstop(SOL);
+    await advance(c, 1300);
+    await setPx(c, SOL, usd(70));                                     // backstop long loses on the way down; t1 (short) is deep in profit
+    await c.ex.connect(c.actors[7]).unwindBackstop([c.keys[1]], SOL);
+    expect((await c.ex.positions(BACKSTOP, SOL)).size).to.equal(0n);
+    await expectAttributed(c, SOL, "unwind");
+  });
+
+  itF("ATTR-4: settleDelisted closing a backstop short at the settle price books the loss on the delisted market", async () => {
+    const c = await mkCtx([6500, 100000, 100000, 6500, 100000, 100000]); await FEES_FULL(c);
+    await pair(c, 1, 0, SOL, sol(100), usd(150));
+    await setPx(c, SOL, usd(210));
+    await c.ex.connect(c.actors[7]).liquidate(c.keys[0], SOL);       // backstop short @210
+    const X = -(await c.ex.positions(BACKSTOP, SOL)).size;
+    await setPx(c, SOL, usd(400));
+    await pair(c, 3, 2, SOL, X, usd(400));                            // t3 long X @400
+    await c.ex.setMarketState(SOL, STATE.ReduceOnly);
+    await c.ex.delistMarket(SOL, usd(340));
+    await c.ex.connect(c.actors[7]).settleDelisted(c.keys[3], SOL);   // backstop (short @210) buys back at 340: flat, realised loss
+    expect((await c.ex.positions(BACKSTOP, SOL)).size).to.equal(0n);
+    await expectAttributed(c, SOL, "settleDelisted");
   });
 
   itF("FINDING OI-1: lowering maxOI below current OI makes every fill revert OICap, including reduce-only closes", async () => {

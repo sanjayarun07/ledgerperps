@@ -55,7 +55,7 @@ contract PerpLiquidation is PerpBase {
         collateral[_register(msg.sender, 0)] += int256(keeperCut);
 
         uint256 bad = _writeOffIfFlat(a, market);
-        _syncBackstop(); // recognise the backstop's mark-to-market deficit (BACKSTOP-1)
+        _syncBackstopAt(market); // recognise the backstop's mark-to-market deficit (BACKSTOP-1)
         _refreshElev(market, px); // phase 2: start the elevation clock if the backstop is above its soft threshold
         emit Liquidated(a, market, msg.sender, uint128(closeSz), uint64(px), fee, bad);
     }
@@ -78,7 +78,7 @@ contract PerpLiquidation is PerpBase {
         _applyFill(a, market, -pos, M.settlePrice);
         _applyFill(BACKSTOP, market, pos, M.settlePrice);
         _writeOffIfFlat(a, market); // insolvent at the settle price: record the loss exactly as liquidation does
-        _syncBackstop();
+        _syncBackstopAt(market);
         emit DelistedSettled(a, market, pos, M.settlePrice);
     }
 
@@ -203,7 +203,7 @@ contract PerpLiquidation is PerpBase {
         int256 after_ = positions[a][market].size;
         if (after_ != 0 && (before_ == 0 || (before_ > 0) != (after_ > 0) || _abs(after_) > _abs(before_)) && !_marginOK(a, market)) revert Unhealthy();
         _writeOffIfFlat(a, market);
-        _syncBackstop();
+        _syncBackstopAt(market);
         _refreshElev(market, mk);
         emit BackstopTaken(market, owner, a, takerSells, size, uint64(px), d, fee);
     }

@@ -35,6 +35,15 @@ contract StressAdl is Test {
         if (!ok && (ret.length < 4 || _sel(ret) == 0x4e487b71)) K.flag("P0", "panic or empty revert in adl");
     }
 
+    /// P12: new backstop debt recorded inside a call that acts on market `m` is booked on `m`
+    function _attr(Vm.Log[] memory logs, uint8 m) internal {
+        bytes32 syncT = keccak256("BackstopSynced(int256,uint256,uint256,uint8,uint256,uint256)");
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(ex) || logs[i].topics[0] != syncT) continue;
+            (, , uint256 tb,,) = abi.decode(logs[i].data, (int256, uint256, uint256, uint256, uint256));
+            if (tb > 0 && uint256(logs[i].topics[1]) != m) K.flag("P12", "backstop debt booked on a market other than the acting market");
+        }
+    }
     function adl(uint256 kS, uint256 mS, uint8 mode) external {
         _fresh();
         uint8 m = uint8(mS % NM); address k = _a(kS);
@@ -47,6 +56,7 @@ contract StressAdl is Test {
         (bool ok, bytes memory ret) = _call("adl", k, abi.encodeCall(IPerp.adl, (list, m)));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         if (!ok) { bytes4 s = _sel(ret); if (s != PerpBase.BadParam.selector && s != PerpBase.MarketRestricted.selector && s != PerpBase.OracleDegraded.selector) K.flag("P0", "adl: unexpected revert"); return; }
+        _attr(logs, m);
         uint256 cleared; uint256 leak_; uint256 syncBad;
         bytes32 syncT = keccak256("BackstopSynced(int256,uint256,uint256,uint8,uint256,uint256)");
         for (uint256 i; i < logs.length; i++) if (logs[i].emitter == address(ex) && logs[i].topics[0] == syncT) { (,, uint256 tb,,) = abi.decode(logs[i].data, (int256, uint256, uint256, uint256, uint256)); syncBad += tb; }
@@ -101,6 +111,7 @@ contract StressAdl is Test {
             return;
         }
         if (!active) K.flag("P2", "take succeeded while the auction was not active");
+        _attr(logs, m);
         bytes32 t = keccak256("BackstopTaken(uint8,address,bytes32,bool,uint128,uint64,uint256,uint256)");
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(ex) || logs[i].topics[0] != t) continue;
@@ -130,6 +141,7 @@ contract StressAdl is Test {
             if (s != PerpBase.BadParam.selector && s != PerpBase.MarketRestricted.selector && s != PerpBase.OracleDegraded.selector) K.flag("P0", "unwindBackstop: unexpected revert");
             return;
         }
+        _attr(logs, m);
         bytes32 t = keccak256("BackstopUnwound(uint8,bytes32,uint128,uint64)");
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(ex) || logs[i].topics[0] != t) continue;

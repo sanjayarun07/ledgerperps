@@ -42,3 +42,7 @@ __pycache__/
 .venv/
 .DS_Store
 coverage/
+infra/testnet/*.pid
+infra/testnet/*.log
+infra/testnet/*.lock
+infra/testnet/*.local.*

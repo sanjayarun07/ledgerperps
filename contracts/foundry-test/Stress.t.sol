@@ -122,6 +122,7 @@ contract StressInvariantTest is StdInvariant, Deployer {
     function invariant_P3_P11_backstopRecognisedAfterSync() public { h.checkProtocolBuffers(); }
     function invariant_P11_syncChecks() public view { h.checkViol("P11"); }
     function invariant_P10_liveness() public view { h.checkViol("P10"); }
+    function invariant_P12_debtAttribution() public view { h.checkViol("P12"); }
     function invariant_P2_backstopPhase2() public view { h.checkViol("P2"); }
     function invariant_P0_noPanicNoOOG() public view { h.checkViol("P0"); }
     function invariant_P9_recapitalizeExact() public view { h.checkViol("P9"); }

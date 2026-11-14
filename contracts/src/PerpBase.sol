@@ -192,6 +192,7 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
     }
     mapping(uint8 => BackstopCfg) public backstopCfg;
     uint32 public backstopTakeFeeBps;   // taker fee on takeBackstop, to insurance (0..10)
+    uint8 internal lastBsMarket; // market named by the last context-bearing backstop sync (attribution fallback when the backstop is flat)
     bool public backstopPlaceOpen = true; // discretionary backstopPlace allowed (guardian may close it, only admin may reopen)
 
     // params
@@ -428,7 +429,7 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
     ///      `wm` = market with the largest unrealised loss (where new debt is attributed).
     function _backstopEquity() internal view returns (int256 eq, uint8 wm) {
         eq = collateral[BACKSTOP];
-        int256 worst;
+        int256 worst; wm = 255; // 255 = no inventory with an unrealised loss
         for (uint8 m = 0; m < marketCount; m++) {
             Position storage p = positions[BACKSTOP][m];
             if (p.size == 0) continue;
@@ -448,8 +449,15 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
     /// @dev Recognises backstop mark-to-market losses. Negative equity E<0: the deficit is credited to collateral[BACKSTOP] (bucket back
     ///      to E=0), charged to insurance first, the rest recorded as unresolvedBadDebt/adlDebt/bsDebt. Positive equity repays earlier
     ///      draws: insurance first, then bsDebt. Idempotent. Ledger identity is unchanged (every move is bucket-to-bucket).
-    function _syncBackstop() internal {
+    function _syncBackstop() internal { _syncBackstopAt(255); }
+
+    /// @dev `hint` = the market of the calling context (liquidated / taken / unwound / ADL / settled market): new debt is booked THERE.
+    ///      255 = no context (withdraw, permissionless sync): the market with the largest unrealised loss while the backstop holds
+    ///      inventory, otherwise the last market a context sync named (`lastBsMarket`).
+    function _syncBackstopAt(uint8 hint) internal {
         (int256 eq, uint8 wm) = _backstopEquity();
+        if (hint < marketCount) { wm = hint; lastBsMarket = hint; }
+        else if (wm == 255) wm = lastBsMarket;
         if (eq < 0) {
             uint256 d = uint256(-eq);
             uint256 cover = d < insurance ? d : insurance;

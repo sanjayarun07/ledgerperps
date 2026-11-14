@@ -77,7 +77,7 @@ contract PerpAdl is PerpBase {
             if (sc == 0) revert BadParam("not in profit");
             _adlOne(t, market);
         }
-        _syncBackstop();
+        _syncBackstopAt(market);
         _refreshElev(market, markPrice(market));
     }
 
@@ -120,7 +120,7 @@ contract PerpAdl is PerpBase {
             left -= sz;
             emit BackstopUnwound(market, t, uint128(sz), uint64(mk));
         }
-        _syncBackstop();
+        _syncBackstopAt(market);
         _refreshElev(market, mk);
     }
 
