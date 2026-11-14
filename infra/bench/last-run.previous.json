@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-13T11:23:22.569Z",
+  "hardhat": "2.22.17",
+  "node": "v22.22.1",
+  "results": [
+    {
+      "name": "resting order, new price level",
+      "note": "GTC sell, empty book",
+      "gas": "303300"
+    },
+    {
+      "name": "resting order, existing price level",
+      "note": "second order same level",
+      "gas": "234404"
+    },
+    {
+      "name": "cancel (single resting order)",
+      "note": "cancelOrder(id=1)",
+      "gas": "80720"
+    },
+    {
+      "name": "single fill, taker opens first position",
+      "note": "IOC buy 0.1 vs 1 maker",
+      "gas": "291275"
+    },
+    {
+      "name": "taker, N=1 fills (distinct makers' orders)",
+      "note": "1 Fill events; 280798 gas/fill",
+      "gas": "280798"
+    },
+    {
+      "name": "taker, N=5 fills (distinct makers' orders)",
+      "note": "5 Fill events; 119851 gas/fill",
+      "gas": "599256"
+    },
+    {
+      "name": "taker, N=10 fills (distinct makers' orders)",
+      "note": "10 Fill events; 85443 gas/fill",
+      "gas": "854431"
+    },
+    {
+      "name": "taker, N=20 fills (distinct makers' orders)",
+      "note": "20 Fill events; 68151 gas/fill",
+      "gas": "1363029"
+    },
+    {
+      "name": "taker, N=40 fills (distinct makers' orders)",
+      "note": "40 Fill events; 59593 gas/fill",
+      "gas": "2383727"
+    },
+    {
+      "name": "liquidate (partial, to backstop)",
+      "note": "1 BTC long, 6000 collateral, mark 45.5k",
+      "gas": "215453"
+    },
+    {
+      "name": "pokeFunding (one interval elapsed)",
+      "note": "no positions, empty book",
+      "gas": "104900"
+    }
+  ]
+}

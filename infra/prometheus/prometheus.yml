@@ -1,0 +1,10 @@
+global: { scrape_interval: 5s }
+scrape_configs:
+  - job_name: chain
+    static_configs: [{ targets: ["chain-exporter:9101"] }]
+  # Targets below only resolve when the `services` profile is up; Prometheus just marks them down otherwise.
+  - job_name: keeper      # metrics port ASSUMED 9102 -- align with services/keeper
+    static_configs: [{ targets: ["keeper:9102"] }]
+  - job_name: indexer     # path/port ASSUMED -- align with services/indexer
+    metrics_path: /metrics
+    static_configs: [{ targets: ["indexer:8080"] }]

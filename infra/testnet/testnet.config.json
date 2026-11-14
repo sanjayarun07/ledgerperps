@@ -1,0 +1,227 @@
+{
+  "_readme": "Single source of truth for testnet external dependencies. 'verifiedOnChain' blocks are written ONLY by contracts/scripts/testnet/verify-addresses.js - never edit by hand. 'source' is where the value was read from; an on-chain check is still required.",
+  "expectedDeployer": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29",
+  "network": {
+    "name": "arbitrumSepolia",
+    "chainId": 421614,
+    "explorer": "https://sepolia.arbiscan.io",
+    "publicRpcReadOnly": "https://sepolia-rollup.arbitrum.io/rpc",
+    "source": "https://docs.arbitrum.io/for-devs/dev-tools-and-resources/chain-info"
+  },
+  "usdc": {
+    "address": "0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d",
+    "expectedSymbol": "USDC",
+    "expectedDecimals": 6,
+    "faucet": "https://faucet.circle.com",
+    "source": "https://developers.circle.com/stablecoins/usdc-contract-addresses",
+    "verifiedOnChain": {
+      "ok": true,
+      "checkedAt": "2026-11-14T15:53:27.764Z",
+      "block": 329188932,
+      "chainId": 421614,
+      "details": "decimals=6 symbol=USDC name=\"USD Coin\""
+    }
+  },
+  "pyth": {
+    "address": "0x4374e5a8b9C22271E9EB878A2AA31DE97DF15DAF",
+    "hermes": "https://hermes.pyth.network",
+    "source": "https://docs.pyth.network/price-feeds/core/contract-addresses/evm",
+    "notes": "Docs list 3 contracts for Arbitrum Sepolia: Pyth Core 0x4374..., Pyth Core Compatible 0x0B73614636C855Bf23F342F307FB981A3e47f42B, Pyth Pro 0xACeA761c27A909d4D3895128EBe6370FDE2dF481. Only Core answered getPriceUnsafe for all 3 feeds when probed read-only; the others reverted. Hermes channel (stable vs beta) for testnet pushes is UNVERIFIED.",
+    "verifiedOnChain": {
+      "ok": true,
+      "checkedAt": "2026-11-14T15:53:28.181Z",
+      "block": 329188932,
+      "chainId": 421614,
+      "details": "has code"
+    }
+  },
+  "oracle": {
+    "medianMaxAgeSecs": 3600,
+    "medianMaxDevBps": 300,
+    "pythMaxConfBps": 100,
+    "notes": "MedianOracle reverts if either source is older than medianMaxAgeSecs. Pyth is pull: it is stale unless something pushes updates (see TESTNET_RUNBOOK). Chainlink testnet heartbeats: BTC/ETH 120s, SOL 86400s per Chainlink's directory, hence the generous 3600s. The same bytes32 (Pyth feed id) is the market feed key in BOTH adapters."
+  },
+  "markets": [
+    {
+      "name": "BTC-USD",
+      "marketId": 0,
+      "oracleMode": "median",
+      "feedId": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+      "chainlink": {
+        "address": "0x56a43EB56Da12C0dc1D972ACb089c06a5dEF8e69",
+        "description": "BTC / USD",
+        "heartbeatSecs": 120,
+        "source": "https://reference-data-directory.vercel.app/feeds-ethereum-testnet-sepolia-arbitrum-1.json",
+        "verifiedOnChain": {
+          "ok": true,
+          "checkedAt": "2026-11-14T15:53:29.842Z",
+          "block": 329188932,
+          "chainId": 421614,
+          "details": "desc=\"BTC / USD\" dec=8 price=65551.89 age=62s"
+        }
+      },
+      "pyth": {
+        "feedId": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+        "source": "https://hermes.pyth.network/v2/price_feeds?query=btc&asset_type=crypto",
+        "verifiedOnChain": {
+          "ok": true,
+          "checkedAt": "2026-11-14T15:53:30.308Z",
+          "block": 329188932,
+          "chainId": 421614,
+          "details": "price=75592.95288238 conf=4913278427 expo=-8 age=586273s STALE: needs a Pyth push before MedianOracle will accept it"
+        }
+      },
+      "params": {
+        "tick": "100000",
+        "lot": "10000",
+        "maxOrderSize": "100000000",
+        "maxOI": "1000000000",
+        "minNotional": "10000000",
+        "maxAge": 3600,
+        "bandBps": 500,
+        "maxSpreadBps": 100,
+        "fundingInterval": 3600,
+        "premiumDivisor": 8,
+        "fundingCap": "400000000",
+        "tiers": [
+          {
+            "upToNotional": "100000000000",
+            "imrBps": 1000,
+            "mmrBps": 500
+          },
+          {
+            "upToNotional": "1000000000000",
+            "imrBps": 2000,
+            "mmrBps": 1000
+          },
+          {
+            "upToNotional": "340282366920938463463374607431768211455",
+            "imrBps": 5000,
+            "mmrBps": 2500
+          }
+        ]
+      }
+    },
+    {
+      "name": "ETH-USD",
+      "marketId": 1,
+      "oracleMode": "median",
+      "feedId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+      "chainlink": {
+        "address": "0xd30e2101a97dcbAeBCBC04F14C3f624E67A35165",
+        "description": "ETH / USD",
+        "heartbeatSecs": 120,
+        "source": "https://reference-data-directory.vercel.app/feeds-ethereum-testnet-sepolia-arbitrum-1.json",
+        "verifiedOnChain": {
+          "ok": true,
+          "checkedAt": "2026-11-14T15:53:32.128Z",
+          "block": 329188932,
+          "chainId": 421614,
+          "details": "desc=\"ETH / USD\" dec=8 price=1835.29357146 age=5s"
+        }
+      },
+      "pyth": {
+        "feedId": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+        "source": "https://hermes.pyth.network/v2/price_feeds?query=eth&asset_type=crypto",
+        "verifiedOnChain": {
+          "ok": true,
+          "checkedAt": "2026-11-14T15:53:32.480Z",
+          "block": 329188932,
+          "chainId": 421614,
+          "details": "price=2225.5988302700002 conf=178691973 expo=-8 age=586273s STALE: needs a Pyth push before MedianOracle will accept it"
+        }
+      },
+      "params": {
+        "tick": "10000",
+        "lot": "100000",
+        "maxOrderSize": "2000000000",
+        "maxOI": "20000000000",
+        "minNotional": "10000000",
+        "maxAge": 3600,
+        "bandBps": 500,
+        "maxSpreadBps": 100,
+        "fundingInterval": 3600,
+        "premiumDivisor": 8,
+        "fundingCap": "400000000",
+        "tiers": [
+          {
+            "upToNotional": "100000000000",
+            "imrBps": 1000,
+            "mmrBps": 500
+          },
+          {
+            "upToNotional": "1000000000000",
+            "imrBps": 2000,
+            "mmrBps": 1000
+          },
+          {
+            "upToNotional": "340282366920938463463374607431768211455",
+            "imrBps": 5000,
+            "mmrBps": 2500
+          }
+        ]
+      }
+    },
+    {
+      "name": "SOL-USD",
+      "marketId": 2,
+      "oracleMode": "median",
+      "feedId": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+      "chainlink": {
+        "address": "0x32377717BC9F9bA8Db45A244bCE77e7c0Cc5A775",
+        "description": "SOL / USD",
+        "heartbeatSecs": 86400,
+        "source": "https://reference-data-directory.vercel.app/feeds-ethereum-testnet-sepolia-arbitrum-1.json",
+        "verifiedOnChain": {
+          "ok": true,
+          "checkedAt": "2026-11-14T15:53:34.324Z",
+          "block": 329188932,
+          "chainId": 421614,
+          "details": "desc=\"SOL / USD\" dec=8 price=73.72405094 age=701s"
+        }
+      },
+      "pyth": {
+        "feedId": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+        "source": "https://hermes.pyth.network/v2/price_feeds?query=sol&asset_type=crypto",
+        "verifiedOnChain": {
+          "ok": true,
+          "checkedAt": "2026-11-14T15:53:34.888Z",
+          "block": 329188932,
+          "chainId": 421614,
+          "details": "price=88.93378975 conf=4237235 expo=-8 age=586273s STALE: needs a Pyth push before MedianOracle will accept it"
+        }
+      },
+      "params": {
+        "tick": "1000",
+        "lot": "1000000",
+        "maxOrderSize": "40000000000",
+        "maxOI": "400000000000",
+        "minNotional": "10000000",
+        "maxAge": 3600,
+        "bandBps": 500,
+        "maxSpreadBps": 100,
+        "fundingInterval": 3600,
+        "premiumDivisor": 8,
+        "fundingCap": "400000000",
+        "tiers": [
+          {
+            "upToNotional": "100000000000",
+            "imrBps": 1000,
+            "mmrBps": 500
+          },
+          {
+            "upToNotional": "1000000000000",
+            "imrBps": 2000,
+            "mmrBps": 1000
+          },
+          {
+            "upToNotional": "340282366920938463463374607431768211455",
+            "imrBps": 5000,
+            "mmrBps": 2500
+          }
+        ]
+      }
+    }
+  ],
+  "differencesFromLocalDeployJs": "maxOrderSize/maxOI reduced ~10000x (sizes in 1e8 units: BTC 1 / 10 BTC, ETH 20 / 200, SOL 400 / 4000). Everything else (tick, lot, tiers, fees, band, funding) identical to scripts/deploy.js. Oracle = MedianOracle(Chainlink, Pyth) instead of ManualOracle; collateral = Circle test USDC instead of MockUSDC."
+}

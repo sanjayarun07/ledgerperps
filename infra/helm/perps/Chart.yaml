@@ -1,0 +1,6 @@
+apiVersion: v2
+name: perps
+description: Perps off-chain services (keeper, indexer, frontend). UNAUDITED prototype template; images/ports/env are ASSUMPTIONS.
+type: application
+version: 0.1.0
+appVersion: "0.0.0"

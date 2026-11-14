@@ -1,0 +1,45 @@
+# Arbitrum Sepolia services stack: postgres + indexer + keeper (DRY-RUN). No chain, no deployer, no frontend, no secrets in this file.
+# Pattern follows infra/docker-compose.yml (same Dockerfiles, context = repo root). Dockerfiles are UNTESTED templates there.
+# Prereqs: contracts/deployments/arbitrumSepolia.json exists (deploy done) and infra/testnet/services.env is filled in.
+# Usage (repo root):
+#   docker compose -f infra/testnet/docker-compose.testnet.yml --env-file infra/testnet/services.env up -d --build
+# The stack only READS the chain. The keeper has no key and KEEPER_DRY_RUN=true: it logs what it WOULD send.
+name: perps-testnet
+
+services:
+  postgres:
+    image: postgres:16
+    environment: { POSTGRES_USER: perps, POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in services.env}", POSTGRES_DB: perps_indexer }
+    volumes: ["pgdata_testnet:/var/lib/postgresql/data"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U perps"], interval: 5s, timeout: 3s, retries: 20 }
+    # no published port: only the indexer talks to it
+
+  indexer:
+    build: { context: ../.., dockerfile: infra/docker/indexer.Dockerfile }
+    depends_on: { postgres: { condition: service_healthy } }
+    environment:
+      RPC_URL: "${ARB_SEPOLIA_RPC_URL:?}"
+      DATABASE_URL: "host=postgres user=perps password=${POSTGRES_PASSWORD} dbname=perps_indexer"
+      EXCHANGE: "${EXCHANGE_ADDRESS:?}"
+      START_BLOCK: "${EXCHANGE_START_BLOCK:?}"
+      LISTEN: "0.0.0.0:8080"
+      CORS_ORIGINS: "${CORS_ORIGINS:-}"
+    volumes: ["../../contracts/deployments:/deployments:ro"]   # market names come from the deployment JSON; add DEPLOYMENT=/deployments/arbitrumSepolia.json if the indexer needs it
+    ports: ["8080:8080"]
+
+  keeper:
+    build: { context: ../.., dockerfile: infra/docker/keeper.Dockerfile }
+    environment:
+      KEEPER_RPC_URL: "${ARB_SEPOLIA_RPC_URL:?}"
+      KEEPER_EXCHANGE: "${EXCHANGE_ADDRESS:?}"
+      KEEPER_START_BLOCK: "${EXCHANGE_START_BLOCK:?}"
+      KEEPER_DRY_RUN: "true"                       # hard-coded on purpose
+      KEEPER_METRICS_ADDR: "0.0.0.0:9102"
+      KEEPER_STATE_FILE: "/state/keeper-state.json"
+      KEEPER_NATIVE_USD_PRICE: "${KEEPER_NATIVE_USD_PRICE:-3000}"
+    volumes: ["keeper_state_testnet:/state"]
+    ports: ["127.0.0.1:9102:9102"]
+
+volumes:
+  pgdata_testnet: {}
+  keeper_state_testnet: {}

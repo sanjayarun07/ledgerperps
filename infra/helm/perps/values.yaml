@@ -1,0 +1,42 @@
+# ASSUMPTIONS: image names, ports, env var names and probe paths are NOT confirmed against the services.
+global:
+  imageRegistry: "REGISTRY.example.invalid"   # placeholder
+  chain:
+    rpcUrl: "https://RPC.example.invalid"     # placeholder, UNVERIFIED
+    exchangeAddress: ""                       # fill from your deployment record; no default on purpose
+externalSecrets:
+  enabled: true
+  apiVersion: external-secrets.io/v1beta1     # UNVERIFIED: match your installed external-secrets CRD version
+  secretStoreRef: { name: perps-secret-store, kind: ClusterSecretStore }
+  # remote keys in your secret manager (names only, no values here)
+  keeperKeyRemoteRef: perps/keeper/signing-key
+  databaseUrlRemoteRef: perps/indexer/database-url
+  redisUrlRemoteRef: perps/indexer/redis-url
+keeper:
+  enabled: true
+  image: { repository: perps/keeper, tag: "0.0.0" }
+  replicas: 1            # >1 only if the keeper is safe to run active-active (liquidations are permissionless, but duplicates waste gas)
+  metricsPort: 9102
+  probes: { path: /healthz }   # ASSUMED path
+  resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: "1", memory: 512Mi } }
+  hpa: { enabled: false }
+indexer:
+  enabled: true
+  image: { repository: perps/indexer, tag: "0.0.0" }
+  replicas: 2
+  port: 8080
+  probes: { path: /healthz }   # ASSUMED path
+  resources: { requests: { cpu: 250m, memory: 256Mi }, limits: { cpu: "2", memory: 1Gi } }
+  hpa: { enabled: true, min: 2, max: 8, cpu: 70 }
+frontend:
+  enabled: true
+  image: { repository: perps/frontend, tag: "0.0.0" }
+  replicas: 2
+  port: 3100
+  probes: { path: / }
+  resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: "1", memory: 512Mi } }
+  hpa: { enabled: true, min: 2, max: 6, cpu: 70 }
+networkPolicy:
+  enabled: true
+  ingressNamespaceLabel: { "kubernetes.io/metadata.name": ingress-nginx }   # assumption
+  monitoringNamespaceLabel: { "kubernetes.io/metadata.name": monitoring }

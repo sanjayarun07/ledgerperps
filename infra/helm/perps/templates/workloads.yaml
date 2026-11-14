@@ -1,0 +1,59 @@
+{{- range $name := list "keeper" "indexer" "frontend" }}
+{{- $svc := index $.Values $name }}
+{{- if $svc.enabled }}
+{{- $port := $svc.port }}{{- if eq $name "keeper" }}{{- $port = $svc.metricsPort }}{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{ include "perps.labels" (dict "name" $name) | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas }}
+  selector: { matchLabels: { app.kubernetes.io/name: {{ $name }} } }
+  template:
+    metadata:
+      labels: {{ include "perps.labels" (dict "name" $name) | nindent 8 }}
+    spec:
+      {{- include "perps.podsec" . | nindent 6 }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "perps.image" (dict "root" $ "svc" $svc) | quote }}
+          ports: [{ name: http, containerPort: {{ $port }} }]
+          envFrom:
+            - configMapRef: { name: perps-config }
+            {{- if $.Values.externalSecrets.enabled }}
+            {{- if eq $name "keeper" }}
+            - secretRef: { name: perps-keeper }
+            {{- else if eq $name "indexer" }}
+            - secretRef: { name: perps-indexer }
+            {{- end }}
+            {{- end }}
+          readinessProbe: { httpGet: { path: {{ $svc.probes.path }}, port: http }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: {{ $svc.probes.path }}, port: http }, initialDelaySeconds: 15, periodSeconds: 10, failureThreshold: 6 }
+          resources: {{ toYaml $svc.resources | nindent 12 }}
+          {{- include "perps.ctrsec" . | nindent 10 }}
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: {{ $name }} }
+spec:
+  selector: { app.kubernetes.io/name: {{ $name }} }
+  ports: [{ name: http, port: {{ $port }}, targetPort: http }]
+{{- if and $svc.hpa $svc.hpa.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: {{ $name }} }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: {{ $name }} }
+  minReplicas: {{ $svc.hpa.min }}
+  maxReplicas: {{ $svc.hpa.max }}
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: {{ $svc.hpa.cpu }} } }
+{{- end }}
+{{- end }}
+{{- end }}

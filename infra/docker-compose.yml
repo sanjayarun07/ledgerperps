@@ -1,0 +1,132 @@
+# Local development stack for the Perps prototype.  LOCAL ONLY: hardhat test keys, mock USDC, manual oracle,
+# default passwords.  Nothing here is production configuration.  UNAUDITED prototype.
+#
+# Usage (from repo root):  make up     (or: docker compose -f infra/docker-compose.yml up -d --build)
+# Optional profiles:  bus (redpanda)   services (keeper/indexer/frontend/bots, only once they have Dockerfiles)
+name: perps
+
+x-chain-url: &chain-url http://chain:8545
+
+services:
+  # ---------------------------------------------------------------- chain
+  chain:
+    build: { context: .., dockerfile: infra/docker/chain.Dockerfile }
+    ports: ["8545:8545"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -X POST -H 'content-type: application/json' --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_chainId\",\"params\":[]}' http://127.0.0.1:8545 | grep -q result"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  # One-shot: deploy MockUSDC + ManualOracle + exchange + 3 markets, export merged ABI, seed accounts.
+  # Shares the chain's network namespace because contracts/hardhat.config.js hardcodes localhost=127.0.0.1:8545
+  # (we may not edit contracts/).  Outputs land in contracts/deployments/localhost.json and contracts/abi/ on the host.
+  deployer:
+    build: { context: .., dockerfile: infra/docker/chain.Dockerfile }
+    network_mode: "service:chain"
+    depends_on: { chain: { condition: service_healthy } }
+    restart: "no"
+    volumes:
+      - ../contracts/deployments:/app/deployments
+      - ../contracts/abi:/app/abi
+      - ./scripts/seed.js:/app/infra-seed.js:ro
+    command:
+      - sh
+      - -ec
+      - |
+        npx hardhat run scripts/deploy.js --network localhost
+        npx hardhat run scripts/export-abi.js
+        npx hardhat run /app/infra-seed.js --network localhost
+        echo "deployer: done"
+
+  # Exposes perps_chain_head_block etc. for Prometheus (hardhat node has no native /metrics).
+  chain-exporter:
+    image: node:22-bookworm-slim
+    command: ["node", "/app/chain-exporter.js"]
+    environment: { RPC_URL: *chain-url, PORT: "9101" }
+    volumes: ["./docker/chain-exporter.js:/app/chain-exporter.js:ro"]
+    depends_on: { chain: { condition: service_healthy } }
+
+  # ---------------------------------------------------------------- data stores
+  postgres:
+    image: postgres:16
+    environment: { POSTGRES_USER: perps, POSTGRES_PASSWORD: perps_dev_only, POSTGRES_DB: perps }
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U perps"], interval: 5s, timeout: 3s, retries: 20 }
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 20 }
+
+  redpanda:
+    profiles: ["bus"]
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7   # UNVERIFIED tag: confirm it exists before relying on it
+    command: [redpanda, start, --overprovisioned, --smp, "1", --memory, 512M, --reserve-memory, 0M, --node-id, "0", --check=false,
+              --kafka-addr, "PLAINTEXT://0.0.0.0:9092", --advertise-kafka-addr, "PLAINTEXT://redpanda:9092"]
+    ports: ["9092:9092"]
+
+  # ---------------------------------------------------------------- observability
+  prometheus:
+    image: prom/prometheus:v2.54.1   # UNVERIFIED tag
+    volumes: ["./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:11.2.0    # UNVERIFIED tag
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin_dev_only
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
+
+  # ---------------------------------------------------------------- app services (PLACEHOLDERS)
+  # These belong to other workstreams.  They are under profile "services" so a plain `up` never builds them.
+  # Dockerfiles live in infra/docker/*.Dockerfile (context = repo root) and are UNTESTED TEMPLATES; env var names
+  # are ASSUMPTIONS and must be aligned with each service's real config.  `make up` starts a service only when
+  # its source dir contains a manifest (Cargo.toml / package.json).
+  keeper:
+    profiles: ["services"]
+    build: { context: .., dockerfile: infra/docker/keeper.Dockerfile }      # source: ../services/keeper
+    depends_on: { deployer: { condition: service_completed_successfully } }
+    environment:
+      RPC_URL: *chain-url                 # ASSUMED name
+      METRICS_ADDR: "0.0.0.0:9102"        # ASSUMED name
+    volumes: ["../contracts/deployments:/deployments:ro"]
+    # KEEPER KEY: never put a real key here; for local use a hardhat test key via an uncommitted .env.
+
+  indexer:
+    profiles: ["services"]
+    build: { context: .., dockerfile: infra/docker/indexer.Dockerfile }     # source: ../services/indexer
+    depends_on:
+      deployer: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      RPC_URL: *chain-url
+      DATABASE_URL: postgres://perps:perps_dev_only@postgres:5432/perps
+      REDIS_URL: redis://redis:6379
+    ports: ["8080:8080"]
+    volumes: ["../contracts/deployments:/deployments:ro"]
+
+  frontend:
+    profiles: ["services"]
+    build: { context: .., dockerfile: infra/docker/frontend.Dockerfile }    # source: ../frontend
+    ports: ["3100:3100"]
+    environment:
+      NEXT_PUBLIC_RPC_URL: http://localhost:8545
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+
+  bots:
+    profiles: ["services"]
+    build: { context: .., dockerfile: infra/docker/bots.Dockerfile }        # source: ../bots (TypeScript; needs ../sdk/ts)
+    depends_on: { deployer: { condition: service_completed_successfully } }
+    environment: { RPC_URL: *chain-url }
+
+volumes:
+  pgdata: {}

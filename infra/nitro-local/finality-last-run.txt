@@ -1,0 +1,9 @@
+L2 at start  latest/safe/finalized: 200 192 150
+L1 at start  latest/safe/finalized: 664 664 640
+tx 0xff8d8cd38d2a927cf0d0efb2256a9bd709dc0bdae62239f01abb1df377a84f73 L2 block 201; submit ack 15 ms, receipt 17 ms after send
+t+ receipt (sequencer-accepted): 0.0 s
+t+ batch sent to L1 (docker log timestamp, clock of container=host): 20.7 s 2026-11-13T12:49:53.160078253Z INFO [11-13|12:49:53.159] BatchPoster: batch sent                  sequenceNumber=10 from=193 to=202 prevDelayed=18 currentDelayed=19 totalSegments=16 numBlobs=0
+t+ L2 safe >= block: 21.9 s
+t+ L2 finalized >= block: 40.0 s
+L2 at end    latest/safe/finalized: 202 201 201
+L1 at end    latest/safe/finalized: 704 704 704

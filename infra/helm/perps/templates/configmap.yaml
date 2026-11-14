@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: perps-config
+  labels: { app.kubernetes.io/part-of: perps }
+data:
+  RPC_URL: {{ .Values.global.chain.rpcUrl | quote }}
+  EXCHANGE_ADDRESS: {{ .Values.global.chain.exchangeAddress | quote }}

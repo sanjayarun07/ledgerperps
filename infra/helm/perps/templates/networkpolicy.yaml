@@ -1,0 +1,35 @@
+{{- if .Values.networkPolicy.enabled }}
+# Default deny, then allow: DNS + HTTPS egress (RPC, DB/Redis in-VPC), ingress from ingress controller / monitoring only.
+# CIDRs/ports for DB and Redis are intentionally broad (443/5432/6379); tighten to the actual subnets after terraform apply.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/part-of: perps } }
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: perps-egress }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/part-of: perps } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ namespaceSelector: {}, podSelector: { matchLabels: { k8s-app: kube-dns } } }]
+      ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+    - ports: [{ protocol: TCP, port: 443 }, { protocol: TCP, port: 5432 }, { protocol: TCP, port: 6379 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: perps-ingress }
+spec:
+  podSelector: { matchLabels: { app.kubernetes.io/part-of: perps } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {{ toYaml .Values.networkPolicy.ingressNamespaceLabel | nindent 14 }}
+    - from:
+        - namespaceSelector:
+            matchLabels: {{ toYaml .Values.networkPolicy.monitoringNamespaceLabel | nindent 14 }}
+{{- end }}
