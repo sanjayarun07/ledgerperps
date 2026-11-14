@@ -13,7 +13,8 @@
     "taker": "tsx src/taker.ts",
     "status": "tsx src/status.ts",
     "verify": "tsx src/verify.ts",
-    "backstop-taker": "tsx src/backstop-taker.ts"
+    "backstop-taker": "tsx src/backstop-taker.ts",
+    "testnet-mm": "tsx src/testnet-mm.ts"
   },
   "dependencies": {
     "@perps/sdk": "link:../sdk/ts",

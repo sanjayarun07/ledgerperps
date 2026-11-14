@@ -103,3 +103,6 @@ ABI/behaviour changes for integrators (BACKSTOP-1 phase 2): new functions `setBa
 - Live gas (UI chain and Nitro local) is in docs/BENCHMARKS.md.
 
 ABI changes for the attribution fix: none (internal `_syncBackstopAt`, internal storage `lastBsMarket` appended; no new selector, event or error). Behaviour change: `BackstopSynced.market` and `adlDebt[m]` now name the acting market. Redeploy needed for the fix.
+
+## BACKSTOP-1 residual observed on Arbitrum Sepolia (2026-11-14, deploy #2)
+Demo on `DEMO-USD` (admin-set price): a clean liquidation to the backstop, then `takeBackstop` at the 150 bps discount put the backstop under water by 0.5625 USDC. Insurance was 0, so it became `unresolvedBadDebt`/`bsDebt` and `adlDebt[3]` (market 3, DEMO: the attribution fix works; market 0 stayed 0). The winner (the taker's short) had already closed, so ADL had no profitable position to haircut and nothing clears the debt: the ledger owed 10.675 USDC against 10.1425 USDC held, and a full `withdraw` reverted `ERC20: transfer amount exceeds balance` (last-withdrawer shortfall, 0.5325 USDC after dust). `fundInsurance` does not repay `unresolvedBadDebt`. Open item: a `recapitalize`-style path (insurance top-up that retires unresolved debt) is not implemented. `scripts/testnet/withdraw-available.js` withdraws what the contract can pay.
