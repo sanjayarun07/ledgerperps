@@ -1,0 +1,37 @@
+# Keeper config for Arbitrum Sepolia. DRY-RUN BY DEFAULT: simulates with eth_call, never signs or sends, needs no key.
+# `exchange` and `start_block` are placeholders that infra/testnet/run-keeper.sh overrides from contracts/deployments/arbitrumSepolia.json
+# through KEEPER_EXCHANGE / KEEPER_START_BLOCK, so re-pointing after a redeploy needs no edit here. No address is hardcoded.
+# rpc_url points at the local http forwarder (rpc-proxy.js, started by run-indexer.sh) because the keeper has no TLS client.
+rpc_url = "http://127.0.0.1:18701"
+exchange = "0x0000000000000000000000000000000000000000"
+start_block = 0
+state_file = "infra/testnet/keeper-state.json"      # git-ignored
+poll_interval_ms = 4000
+confirmations = 0
+reorg_window = 600                                  # ~2.5 minutes of 0.25 s Arbitrum blocks
+log_chunk = 1000
+rpc_concurrency = 2
+multicall = "auto"
+dry_run = true                                      # <- flip only for a LIVE run with your own separate keeper key (see infra/testnet/README.md)
+enable_funding = true
+enable_liquidation = true
+enable_conditional = true
+enable_twap = true
+enable_adl = true
+enable_writeoff = true
+writeoff_max_gas_usd = 0.05                         # testnet ETH is scarce: gas budgets far below the mainnet defaults
+enable_sync_backstop = true
+sync_backstop_max_gas_usd = 0.05
+sync_backstop_interval_secs = 60
+enable_poke_backstop = true
+poke_backstop_max_gas_usd = 0.05
+enable_unwind_backstop = true
+unwind_backstop_max_gas_usd = 0.10
+backstop_inventory_interval_secs = 30
+enable_pyth_push = false                            # oracle mode is chainlink: Pyth is not used, no pusher
+native_usd_price = 3000.0
+min_profit_usd = 0.0
+max_fee_gwei = 2
+metrics_addr = "127.0.0.1:9150"
+max_ready_lag_blocks = 200
+log_format = "text"

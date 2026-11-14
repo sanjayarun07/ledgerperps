@@ -1,0 +1,44 @@
+{
+  "ranAt": "2026-11-14T17:43:07.396Z",
+  "chainId": 421614,
+  "exchange": "0xBc49e99760080CBd3590062260346D00ad2ACCB1",
+  "admin": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29",
+  "gitCommit": "7824ace13cf2140a66b3a9a644aafad445c0ba7b",
+  "configHash": "0x84626edafa31f7f6afac325b1f1af908fb33b8a6965ea9c199a84e547c496866",
+  "markets": [
+    {
+      "name": "BTC-USD",
+      "id": 0,
+      "softNotional": "13000000000",
+      "maxDiscBps": 100,
+      "dwell": 60,
+      "ramp": 600,
+      "maxAge": 1800
+    },
+    {
+      "name": "DEMO-USD",
+      "id": 3,
+      "softNotional": "10000000",
+      "maxDiscBps": 150,
+      "dwell": 30,
+      "ramp": 120,
+      "maxAge": 600
+    }
+  ],
+  "txs": [
+    {
+      "market": "BTC-USD",
+      "hash": "0x21dcd27ddddab2f4a19cf1a6bfdcf142b86bbe4408a933801e20bf9a2f24a08c",
+      "block": 329213643,
+      "gasUsed": "70750",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0x21dcd27ddddab2f4a19cf1a6bfdcf142b86bbe4408a933801e20bf9a2f24a08c"
+    },
+    {
+      "market": "DEMO-USD",
+      "hash": "0xdc0c98449a73b2d58fbefddb8995fe0ff59e253e6626bf358cd8e09bbda27214",
+      "block": 329213661,
+      "gasUsed": "70647",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0xdc0c98449a73b2d58fbefddb8995fe0ff59e253e6626bf358cd8e09bbda27214"
+    }
+  ]
+}

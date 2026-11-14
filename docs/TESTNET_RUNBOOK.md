@@ -139,6 +139,8 @@ cp infra/testnet/env.testnet.example infra/testnet/services.env    # fill from a
 docker compose -f infra/testnet/docker-compose.testnet.yml --env-file infra/testnet/services.env up -d --build
 (cd ../frontend && node scripts/sync-deployment.mjs arbitrumSepolia)   # frontend owner; see infra/testnet/TESTNET_UI_PLAN.md first
 ```
+**Without docker (what is actually running for the demo):** `infra/testnet/run-indexer.sh start`, optional `infra/testnet/run-keeper.sh start` (dry-run), `cd frontend && npm run dev:testnet` (http://localhost:3150). Stop, ports, own-RPC and the re-point steps after a redeploy are in `infra/testnet/README.md` section "Run the testnet stack".
+
 `docker compose config` validated the compose file's syntax only; images were not built. The Dockerfiles are the repo's existing untested templates. The keeper is dry-run with no key. Frontend labels: `infra/testnet/TESTNET_UI_PLAN.md`.
 
 ## 13. Lock modules (USER; IRREVERSIBLE; only after smoke tests and a soak period)

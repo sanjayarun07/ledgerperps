@@ -1,0 +1,180 @@
+{
+  "ranAt": "2026-11-14T17:38:43.261Z",
+  "chainId": 421614,
+  "exchange": "0xBc49e99760080CBd3590062260346D00ad2ACCB1",
+  "market": "BTC-USD",
+  "trader1": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29",
+  "trader2": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29",
+  "gitCommit": "7824ace13cf2140a66b3a9a644aafad445c0ba7b",
+  "configHash": "0x84626edafa31f7f6afac325b1f1af908fb33b8a6965ea9c199a84e547c496866",
+  "summary": {
+    "ok": 14,
+    "failed": 0,
+    "skipped": 0,
+    "totalGas": "2407062"
+  },
+  "stages": [
+    {
+      "name": "preflight: modules unlocked/locked, markets, balances",
+      "status": "ok",
+      "modulesLocked": false,
+      "marketCount": 4,
+      "usdcBalTrader1": "20000000",
+      "ethBalTrader1": "18408660580663534",
+      "totalMs": 1479
+    },
+    {
+      "name": "oracle read (router.oracle().latest(feed))",
+      "status": "ok",
+      "price1e6": "65685212586",
+      "updatedAt": 1794677783,
+      "ageSecs": 100,
+      "totalMs": 754
+    },
+    {
+      "name": "approve USDC (trader1)",
+      "status": "ok",
+      "hash": "0xeca94a88e63e06c86daccb218f076755870cbc5182c3504f43123f2c7d38e4c4",
+      "block": 329212539,
+      "gasUsed": "61205",
+      "effGasPriceWei": "20108001",
+      "submitMs": 3807,
+      "minedMs": 400,
+      "confirmations": 1,
+      "totalMs": 4593
+    },
+    {
+      "name": "deposit trader1 sub0",
+      "status": "ok",
+      "hash": "0x9afb1be30ce02abf358276d16db2ecef741af513289a35f548f4c2f599c62040",
+      "block": 329212553,
+      "gasUsed": "179196",
+      "effGasPriceWei": "20100001",
+      "submitMs": 3255,
+      "minedMs": 367,
+      "confirmations": 1,
+      "totalMs": 3622
+    },
+    {
+      "name": "deposit trader2 sub1",
+      "status": "ok",
+      "hash": "0x7bb4e83fcb7cee15b76e700183e41a344f6db2372e39ce44b3e43e9a03662533",
+      "block": 329212565,
+      "gasUsed": "145013",
+      "effGasPriceWei": "20086001",
+      "submitMs": 2377,
+      "minedMs": 330,
+      "confirmations": 1,
+      "totalMs": 2707
+    },
+    {
+      "name": "place resting bid (GTC, 50 ticks below mid)",
+      "status": "ok",
+      "hash": "0x84d6a525f16989ba7b3514651f0be71a20dfc1d58053a237acd450b41769b513",
+      "block": 329212576,
+      "gasUsed": "374495",
+      "effGasPriceWei": "20124001",
+      "submitMs": 3363,
+      "minedMs": 352,
+      "confirmations": 1,
+      "orderId": "1",
+      "totalMs": 3722
+    },
+    {
+      "name": "cancel resting bid",
+      "status": "ok",
+      "hash": "0x5f2b77cb29ce843119f5c832fa1d6bf2f6cffb04ca17977ac535324f3d51f0bf",
+      "block": 329212590,
+      "gasUsed": "81719",
+      "effGasPriceWei": "20050001",
+      "submitMs": 3346,
+      "minedMs": 352,
+      "confirmations": 1,
+      "totalMs": 3698
+    },
+    {
+      "name": "maker bid (GTC) at price",
+      "status": "ok",
+      "hash": "0x6da1061105a588fd108c680d22ca6176a70d998d07279d71e0bf0c2b1f5c7ce6",
+      "block": 329212603,
+      "gasUsed": "374663",
+      "effGasPriceWei": "20000001",
+      "submitMs": 3093,
+      "minedMs": 346,
+      "confirmations": 1,
+      "orderId": "2",
+      "totalMs": 3446
+    },
+    {
+      "name": "taker ask (IOC) crosses -> Fill",
+      "status": "ok",
+      "hash": "0x1d609d207c9f37a704fa6e0c62730275faabd031e7dc1b14496606d3177a317d",
+      "block": 329212617,
+      "gasUsed": "364999",
+      "effGasPriceWei": "20072001",
+      "submitMs": 3302,
+      "minedMs": 344,
+      "confirmations": 1,
+      "fills": 1,
+      "fillSize": "20000",
+      "takerFee": "6569",
+      "totalMs": 3649
+    },
+    {
+      "name": "close: trader2 bid (GTC, reduce-only)",
+      "status": "ok",
+      "hash": "0xa11623902f76b95eefaf7b61f1b214a77041df8a44b17ccdff242328db7ef8d7",
+      "block": 329212630,
+      "gasUsed": "344899",
+      "effGasPriceWei": "20000001",
+      "submitMs": 2960,
+      "minedMs": 323,
+      "confirmations": 1,
+      "totalMs": 3283
+    },
+    {
+      "name": "close: trader1 ask (IOC, reduce-only) -> Fill",
+      "status": "ok",
+      "hash": "0x321a8145220f29813d7fb5b8599ce36fd3428cc57b0168af2983189210912b9c",
+      "block": 329212643,
+      "gasUsed": "214106",
+      "effGasPriceWei": "20012001",
+      "submitMs": 2987,
+      "minedMs": 315,
+      "confirmations": 1,
+      "fills": 1,
+      "totalMs": 3311
+    },
+    {
+      "name": "pokeFunding",
+      "status": "ok",
+      "hash": "0x4d486b1b8ce6a670aa8155ece4e3f9485f7ec3e01636de9f304df2b49ea21ffa",
+      "block": 329212656,
+      "gasUsed": "121906",
+      "effGasPriceWei": "20146001",
+      "submitMs": 3009,
+      "minedMs": 364,
+      "confirmations": 1,
+      "totalMs": 3373
+    },
+    {
+      "name": "accountState (read)",
+      "status": "ok",
+      "equity": "4992117",
+      "avail": "4992117",
+      "totalMs": 706
+    },
+    {
+      "name": "withdraw 1 USDC (trader1)",
+      "status": "ok",
+      "hash": "0xb28bcb80d7194f0f72ff00075088b78dc1c096cae1d2b9400d2dfee6d84a4d67",
+      "block": 329212672,
+      "gasUsed": "144861",
+      "effGasPriceWei": "20212001",
+      "submitMs": 2637,
+      "minedMs": 406,
+      "confirmations": 1,
+      "totalMs": 3043
+    }
+  ]
+}

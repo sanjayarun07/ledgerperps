@@ -16,8 +16,8 @@
     "source": "https://developers.circle.com/stablecoins/usdc-contract-addresses",
     "verifiedOnChain": {
       "ok": true,
-      "checkedAt": "2026-11-14T15:53:27.764Z",
-      "block": 329188932,
+      "checkedAt": "2026-11-14T17:32:37.128Z",
+      "block": 329211275,
       "chainId": 421614,
       "details": "decimals=6 symbol=USDC name=\"USD Coin\""
     }
@@ -29,8 +29,8 @@
     "notes": "Docs list 3 contracts for Arbitrum Sepolia: Pyth Core 0x4374..., Pyth Core Compatible 0x0B73614636C855Bf23F342F307FB981A3e47f42B, Pyth Pro 0xACeA761c27A909d4D3895128EBe6370FDE2dF481. Only Core answered getPriceUnsafe for all 3 feeds when probed read-only; the others reverted. Hermes channel (stable vs beta) for testnet pushes is UNVERIFIED.",
     "verifiedOnChain": {
       "ok": true,
-      "checkedAt": "2026-11-14T15:53:28.181Z",
-      "block": 329188932,
+      "checkedAt": "2026-11-14T17:32:37.551Z",
+      "block": 329211275,
       "chainId": 421614,
       "details": "has code"
     }
@@ -68,6 +68,13 @@
         "gapMaxSecs": 10591
       },
       "rule": "market maxAge >= p95 gap with margin (we use >= 1.3x the worst observed gap, rounded): BTC 600 (4x p95), ETH 600 (10x p95), SOL 14400 (1.36x the max 10591 and 1.8x p95; the SOL testnet feed updates on a 24h heartbeat/deviation and is bursty). A longer maxAge weakens staleness protection; on mainnet use the feed's real heartbeat."
+    },
+    "verifiedOnChain": {
+      "checkedAt": "2026-11-14T17:32:43.142Z",
+      "block": 329211275,
+      "recommendedMode": "chainlink",
+      "reason": "Pyth stale (worst age 592223s > 600s) and nothing is pushing",
+      "worstPythAgeSecs": 592223
     }
   },
   "markets": [
@@ -83,10 +90,10 @@
         "source": "https://reference-data-directory.vercel.app/feeds-ethereum-testnet-sepolia-arbitrum-1.json",
         "verifiedOnChain": {
           "ok": true,
-          "checkedAt": "2026-11-14T15:53:29.842Z",
-          "block": 329188932,
+          "checkedAt": "2026-11-14T17:32:39.066Z",
+          "block": 329211275,
           "chainId": 421614,
-          "details": "desc=\"BTC / USD\" dec=8 price=65551.89 age=62s"
+          "details": "desc=\"BTC / USD\" dec=8 price=65609.08 age=11s"
         }
       },
       "pyth": {
@@ -94,10 +101,10 @@
         "source": "https://hermes.pyth.network/v2/price_feeds?query=btc&asset_type=crypto",
         "verifiedOnChain": {
           "ok": true,
-          "checkedAt": "2026-11-14T15:53:30.308Z",
-          "block": 329188932,
+          "checkedAt": "2026-11-14T17:32:39.403Z",
+          "block": 329211275,
           "chainId": 421614,
-          "details": "price=75592.95288238 conf=4913278427 expo=-8 age=586273s STALE: needs a Pyth push before MedianOracle will accept it"
+          "details": "price=75592.95288238 conf=4913278427 expo=-8 age=592223s STALE: needs a Pyth push before MedianOracle will accept it"
         }
       },
       "params": {
@@ -143,10 +150,10 @@
         "source": "https://reference-data-directory.vercel.app/feeds-ethereum-testnet-sepolia-arbitrum-1.json",
         "verifiedOnChain": {
           "ok": true,
-          "checkedAt": "2026-11-14T15:53:32.128Z",
-          "block": 329188932,
+          "checkedAt": "2026-11-14T17:32:40.934Z",
+          "block": 329211275,
           "chainId": 421614,
-          "details": "desc=\"ETH / USD\" dec=8 price=1835.29357146 age=5s"
+          "details": "desc=\"ETH / USD\" dec=8 price=1841.61844536 age=-1s"
         }
       },
       "pyth": {
@@ -154,10 +161,10 @@
         "source": "https://hermes.pyth.network/v2/price_feeds?query=eth&asset_type=crypto",
         "verifiedOnChain": {
           "ok": true,
-          "checkedAt": "2026-11-14T15:53:32.480Z",
-          "block": 329188932,
+          "checkedAt": "2026-11-14T17:32:41.387Z",
+          "block": 329211275,
           "chainId": 421614,
-          "details": "price=2225.5988302700002 conf=178691973 expo=-8 age=586273s STALE: needs a Pyth push before MedianOracle will accept it"
+          "details": "price=2225.5988302700002 conf=178691973 expo=-8 age=592223s STALE: needs a Pyth push before MedianOracle will accept it"
         }
       },
       "params": {
@@ -203,10 +210,10 @@
         "source": "https://reference-data-directory.vercel.app/feeds-ethereum-testnet-sepolia-arbitrum-1.json",
         "verifiedOnChain": {
           "ok": true,
-          "checkedAt": "2026-11-14T15:53:34.324Z",
-          "block": 329188932,
+          "checkedAt": "2026-11-14T17:32:42.821Z",
+          "block": 329211275,
           "chainId": 421614,
-          "details": "desc=\"SOL / USD\" dec=8 price=73.72405094 age=701s"
+          "details": "desc=\"SOL / USD\" dec=8 price=72.95368828 age=471s"
         }
       },
       "pyth": {
@@ -214,10 +221,10 @@
         "source": "https://hermes.pyth.network/v2/price_feeds?query=sol&asset_type=crypto",
         "verifiedOnChain": {
           "ok": true,
-          "checkedAt": "2026-11-14T15:53:34.888Z",
-          "block": 329188932,
+          "checkedAt": "2026-11-14T17:32:43.141Z",
+          "block": 329211275,
           "chainId": 421614,
-          "details": "price=88.93378975 conf=4237235 expo=-8 age=586273s STALE: needs a Pyth push before MedianOracle will accept it"
+          "details": "price=88.93378975 conf=4237235 expo=-8 age=592223s STALE: needs a Pyth push before MedianOracle will accept it"
         }
       },
       "params": {
