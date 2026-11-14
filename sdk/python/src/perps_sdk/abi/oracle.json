@@ -1,0 +1,92 @@
+[
+ {
+  "type": "function",
+  "name": "latest",
+  "inputs": [
+   {
+    "type": "bytes32",
+    "name": "feed"
+   }
+  ],
+  "outputs": [
+   {
+    "type": "uint256",
+    "name": ""
+   },
+   {
+    "type": "uint256",
+    "name": ""
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "owner",
+  "inputs": [],
+  "outputs": [
+   {
+    "type": "address",
+    "name": ""
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "p",
+  "inputs": [
+   {
+    "type": "bytes32",
+    "name": ""
+   }
+  ],
+  "outputs": [
+   {
+    "type": "uint256",
+    "name": "price"
+   },
+   {
+    "type": "uint256",
+    "name": "t"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "set",
+  "inputs": [
+   {
+    "type": "bytes32",
+    "name": "feed"
+   },
+   {
+    "type": "uint256",
+    "name": "price"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setAt",
+  "inputs": [
+   {
+    "type": "bytes32",
+    "name": "feed"
+   },
+   {
+    "type": "uint256",
+    "name": "price"
+   },
+   {
+    "type": "uint256",
+    "name": "t"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ }
+]
