@@ -13,12 +13,12 @@ async function main() {
   const usdc = await (await ethers.getContractFactory("MockUSDC")).deploy();
   const oracle = await (await ethers.getContractFactory("ManualOracle")).deploy();
   const ex = await deployExchange(await usdc.getAddress(), await oracle.getAddress(), admin, { lock: false });
-  const nominal = { "BTC-USD": 65000e6, "ETH-USD": 1800e6, "SOL-USD": 75e6 };
+  const nominal = { "BTC-USD": 65000e6, "ETH-USD": 1800e6, "SOL-USD": 75e6, "DEMO-USD": 100e6 };
   for (const m of cfg.markets) { await oracle.set(m.feedId, BigInt(nominal[m.name])); const [mc, t] = L.marketCreateArgs(m); await ex.createMarket(mc, t); }
   await usdc.mint(admin.address, 1_000_000_000n);
   const d = { chainId: 31337, exchange: await ex.getAddress(), usdc: await usdc.getAddress() };
   const { run } = require("../smoke-testnet");
-  for (const useT2 of [false, true]) for (const market of ["0", "1", "2"]) {
+  for (const useT2 of [false, true]) for (const market of ["0", "1", "2", "3"]) {
     process.env.SMOKE_MARKET = market;
     if (useT2) { await usdc.mint(other.address, 1_000_000_000n); }
     const signers = useT2 ? [admin] : [admin];

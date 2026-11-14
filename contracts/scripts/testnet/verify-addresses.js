@@ -40,7 +40,9 @@ async function main() {
     stamp(p, ok, d); row("Pyth contract", p.address, ok, d);
   }
   const pyth = new ethers.Contract(cfg.pyth.address, pythAbi, ethers.provider);
+  const pythAges = [];
   for (const m of cfg.markets) {
+    if (m.oracleMode === "demo") { row(`${m.name} oracle`, "-", true, "DEMO market: admin-set ManualOracle via RoutingOracle (no external feed to verify; NOT a real price)"); continue; }
     if (m.chainlink) {
       const c = m.chainlink; let ok = false, d = "";
       try {
@@ -62,9 +64,9 @@ async function main() {
       try {
         const r = await pyth.getPriceUnsafe(m.pyth.feedId);
         const age = now - Number(r.publishTime); const px = Number(r.price) * 10 ** Number(r.expo);
-        ok = r.price > 0n;
+        ok = r.price > 0n; pythAges.push(age);
         d = `price=${px} conf=${r.conf} expo=${r.expo} age=${age}s${age > MAX_AGE_WARN ? " STALE: needs a Pyth push before MedianOracle will accept it" : ""}`;
-      } catch (e) { d = "getPriceUnsafe reverted (feed id unknown to this Pyth contract?)"; }
+      } catch (e) { d = "getPriceUnsafe reverted (feed id unknown to this Pyth contract?)"; pythAges.push(NaN); }
       stamp(m.pyth, ok, d); row(`${m.name} Pyth feed`, m.pyth.feedId.slice(0, 12) + "...", ok, d);
     } else row(`${m.name} Pyth feed`, "-", false, "manual-oracle-only (testnet demo)");
     if (m.oracleMode === "manual") row(`${m.name} mode`, "-", true, "manual-oracle-only (testnet demo)");
@@ -72,6 +74,9 @@ async function main() {
   console.log(L.table(rows));
   const failed = rows.filter((r) => r.result === "FAIL").length;
   console.log(`\nBlock ${block.number}, chainId ${net.chainId}. ${rows.length - failed} PASS / ${failed} FAIL`);
+  const rec = L.recommendOracleMode(pythAges, cfg.oracle.pythFreshSecs || 600);
+  console.log(`\nORACLE MODE RECOMMENDATION: ${rec.mode} (${rec.reason}). Config default is '${cfg.oracle.mode}'. Rule: use 'median' only if Pyth is fresh AND a pusher is running; set ORACLE_MODE=median|chainlink or edit oracle.mode.`);
+  cfg.oracle.verifiedOnChain = { checkedAt: new Date().toISOString(), block: block.number, recommendedMode: rec.mode, reason: rec.reason, worstPythAgeSecs: pythAges.length ? Math.max(...pythAges) : null };
   console.log("Note: a stale Pyth price is reported but is not a PASS/FAIL issue of the address; it is a liveness TODO (keeper pusher).");
   if (process.env.NO_WRITE !== "1") { L.saveConfig(cfg); console.log("verifiedOnChain fields written to infra/testnet/testnet.config.json"); }
   process.exitCode = failed ? 1 : 0;

@@ -78,6 +78,50 @@ contract PerpAdl is PerpBase {
             _adlOne(t, market);
         }
         _syncBackstop();
+        _refreshElev(market, markPrice(market));
+    }
+
+    /// @notice Forced unwind (phase 2): once the backstop has been above its soft threshold for `maxAge` seconds, ranked profitable
+    ///         opposite-side accounts are closed AT MARK (no concession: they keep all profit) against the backstop until its inventory is
+    ///         back at the threshold. Same keeper-supplied ranking rules as `adl`; completeness is keeper-trusted. Never blocks liquidation.
+    function unwindBackstop(bytes32[] calldata targets, uint8 market) external nonReentrant {
+        Market storage M = markets[market];
+        if (M.state == State.Paused || M.state == State.OracleDegraded || M.state == State.Delisted) revert MarketRestricted();
+        if (targets.length == 0 || targets.length > MAX_ADL_TARGETS) revert BadParam("targets");
+        uint256 mk = markPrice(market);
+        _refreshElev(market, mk);
+        BackstopCfg storage c = backstopCfg[market];
+        if (c.elevatedSince == 0 || block.timestamp < uint256(c.elevatedSince) + c.maxAge) revert BadParam("not due");
+        int256 bs = positions[BACKSTOP][market].size;
+        uint256 keep = uint256(c.softNotional) * SIZE_SCALE / mk;
+        uint256 left = _abs(bs) > keep ? _abs(bs) - keep : 0;
+        left = ((left + M.lot - 1) / M.lot) * M.lot; // round UP to a lot so the remainder ends at or below the threshold
+        if (left > _abs(bs)) left = (_abs(bs) / M.lot) * M.lot;
+        if (left == 0) revert BadParam("nothing to unwind");
+        _settleMarket(BACKSTOP, market);
+        uint256 prevScore = type(uint256).max;
+        bytes32 prevKey;
+        for (uint256 i; i < targets.length && left > 0; i++) {
+            bytes32 t = targets[i];
+            uint256 sc = adlScore(t, market);
+            if (i > 0 && !(sc < prevScore || (sc == prevScore && t > prevKey))) revert BadParam("not ranked");
+            prevScore = sc; prevKey = t;
+            if (sc == 0) revert BadParam("not in profit");
+            _settleAll(t);
+            Position storage tp = positions[t][market];
+            if (t == BACKSTOP || (tp.size > 0) == (bs > 0)) revert BadParam("not opposite to backstop");
+            uint256 sz = _abs(tp.size) < left ? _abs(tp.size) : left;
+            sz = (sz / M.lot) * M.lot;
+            if (sz == 0) continue;
+            int256 q = int256(sz);
+            bool tl = tp.size > 0;
+            _applyFill(t, market, tl ? -q : q, mk);
+            _applyFill(BACKSTOP, market, tl ? q : -q, mk);
+            left -= sz;
+            emit BackstopUnwound(market, t, uint128(sz), uint64(mk));
+        }
+        _syncBackstop();
+        _refreshElev(market, mk);
     }
 
     function _adlOne(bytes32 t, uint8 market) internal {

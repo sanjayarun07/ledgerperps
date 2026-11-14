@@ -65,6 +65,7 @@ contract StressInvariantTest is StdInvariant, Deployer {
         address aa = deployCode("StressAdl.sol:StressAdl");
         StressAdl(aa).init(ex, kk, hh);
         h = IStressHandler(cc); kp = StressKeeper(kk);
+        ex.grantRole(0x00, aa);
         ex.grantRole(0x00, hh); ex.grantRole(0x00, kk); // handlers act as admin (state changes, delist, rebalance)
         ex.grantRole(ex.BACKSTOP_ROLE(), address(0xB5));
         targetContract(hh); targetContract(kk); targetContract(aa);
@@ -92,10 +93,11 @@ contract StressInvariantTest is StdInvariant, Deployer {
         bytes4[] memory ksel = new bytes4[](j);
         for (uint256 i; i < j; i++) ksel[i] = k[i];
         targetSelector(FuzzSelector({addr: kk, selectors: ksel}));
-        bytes4[] memory asel = new bytes4[](9);
+        bytes4[] memory asel = new bytes4[](14);
         for (uint256 i; i < 4; i++) asel[i] = StressAdl.adl.selector;
         asel[4] = StressAdl.syncBackstop.selector; asel[5] = StressAdl.syncBackstop.selector;
         asel[6] = StressAdl.deposit.selector; asel[7] = StressAdl.withdraw.selector; asel[8] = StressAdl.rebalance.selector;
+        asel[9] = StressAdl.p2cfg.selector; asel[10] = StressAdl.take.selector; asel[11] = StressAdl.take.selector; asel[12] = StressAdl.force.selector; asel[13] = StressAdl.force.selector;
         targetSelector(FuzzSelector({addr: aa, selectors: asel}));
     }
 
@@ -120,6 +122,7 @@ contract StressInvariantTest is StdInvariant, Deployer {
     function invariant_P3_P11_backstopRecognisedAfterSync() public { h.checkProtocolBuffers(); }
     function invariant_P11_syncChecks() public view { h.checkViol("P11"); }
     function invariant_P10_liveness() public view { h.checkViol("P10"); }
+    function invariant_P2_backstopPhase2() public view { h.checkViol("P2"); }
     function invariant_P0_noPanicNoOOG() public view { h.checkViol("P0"); }
     function invariant_P9_recapitalizeExact() public view { h.checkViol("P9"); }
 }

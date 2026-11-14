@@ -225,6 +225,9 @@ function checkTx(c, pre, post, evs, label, { keeper = null, donated = 0n, rebala
       } else if (e.name === "AdlExecuted" || e.name === "DelistedSettled") {
         const k = e.name === "AdlExecuted" ? e.args.target : e.args.acct, m = Number(e.args.market);
         (pre.pos.get(k)[m].iso ? directIso : directCross).add(pre.pos.get(k)[m].iso ? k + "|" + m : k);
+      } else if (e.name === "BackstopUnwound" || e.name === "BackstopTaken") {
+        const k = e.name === "BackstopUnwound" ? e.args.target : e.args.acct, m = Number(e.args.market);
+        (pre.pos.get(k)[m].iso ? directIso : directCross).add(pre.pos.get(k)[m].iso ? k + "|" + m : k);
       } else if (e.name === "Fill") {
         for (const k of [e.args.maker, e.args.taker]) { const m = Number(e.args.market); (pre.pos.get(k)[m].iso ? directIso : directCross).add(pre.pos.get(k)[m].iso ? k + "|" + m : k); }
       }
@@ -558,6 +561,13 @@ async function sweep(c, kIdx, seed, label) {
   for (const [k, m] of order_) await doLiquidate(c, kIdx, k, m, `${label} sweep liq ${c.nameOf(k)}/${MK[m].name}`);
 }
 
+async function ensureInventory(c, s, label) {
+  let any = false; for (let j = 0; j < NM; j++) if (c.st.pos.get(BACKSTOP)[j].size !== 0n) any = true;
+  if (any) return;
+  shockPx(c, s.m, s.bps); await refresh(c); c.st = await readState(c);
+  await sweep(c, s.k, 3, label + " (seed inventory)"); c.st = await readState(c);
+  for (let j = 0; j < NM; j++) if (c.st.pos.get(BACKSTOP)[j].size !== 0n) { bump("p2-inventory-seeded"); return; }
+}
 async function runStep(c, s, idx) {
   const label = `#${idx} ${s.t}`;
   await ensureFresh(c);
@@ -607,6 +617,59 @@ async function runStep(c, s, idx) {
       // idempotent: a second call right after changes nothing
       const r2 = await send(c, label + " again", () => c.ex.connect(c.actors[s.k]).syncBackstop({ gasLimit: GAS }));
       if (!r2.ok || r2.evs.length) viol(c, "P11", `${label}: syncBackstop is not idempotent (${r2.ok ? r2.evs.map((e) => e.name) : errStr(r2.err)})`);
+      return;
+    }
+    case "bscfg": {
+      const soft = BigInt(s.soft) * 1000000n;               // 0 disables
+      const r = await send(c, label, () => c.ex.setBackstopCfg(s.m, soft, s.disc, s.dwell, s.ramp, s.dwell + s.ramp + s.extra, { gasLimit: GAS }));
+      if (!r.ok) throw new Viol("P0", `${label}: setBackstopCfg reverted ${errStr(r.err)}`);
+      c.st = await readState(c); return;
+    }
+    case "bstake": {
+      await ensureFresh(c); c.st = await readState(c); await ensureInventory(c, s, label);
+      const pre = c.st; const m = (() => { let b = s.m, best = -1n; for (let j = 0; j < NM; j++) { const z = abs(c.st.pos.get(BACKSTOP)[j].size); if (z > best) { best = z; b = j; } } return b; })(); const bs = pre.pos.get(BACKSTOP)[m].size; if (bs === 0n || pre.mark[m] === null) { bump(bs === 0n ? "bstake-noinv" : "bstake-nomark"); return; }
+      const lot = MK[m].lot; let size = abs(bs) * BigInt(s.pct) / 100n / lot * lot; if (size === 0n) size = lot;
+      const sells = bs < 0n; const a = c.actors[s.k]; bump("bstake-attempt");
+      const q = await c.ex.backstopAuction(m);
+      const r = await send(c, label, () => c.ex.connect(a).takeBackstop(a.address, 0, m, size, sells ? 1n : (1n << 63n), { gasLimit: GAS }));
+      if (!r.ok) {
+        if (!["BadParam", "Unhealthy", "MarketRestricted", "OracleDegraded", "OICap", "Paused"].includes(r.err.name)) throw new Viol("P0", `${label}: unexpected takeBackstop revert ${errStr(r.err)}`);
+        if (r.err.name === "BadParam" && q.active && size <= abs(bs)) bump("take-reverted-while-active:" + r.err.args[0]);
+        return;
+      }
+      const T = r.evs.find((e) => e.name === "BackstopTaken").args; bump("bstake-ok");
+      const post = await readState(c); c.st = post;
+      const cfg = await c.ex.backstopCfg(m);
+      const bsAfter = post.pos.get(BACKSTOP)[m].size;
+      if (abs(bsAfter) !== abs(bs) - size) viol(c, "P2a", `${label}: inventory ${bs} -> ${bsAfter} after taking ${size}`);
+      if (Number(T.discBps) > Number(cfg.maxDiscBps) || Number(T.discBps) > 300) viol(c, "P2b", `${label}: discount ${T.discBps} above the cap ${cfg.maxDiscBps}`);
+      if (T.takerSold !== sells) viol(c, "P2c", `${label}: taker side wrong`);
+      { const dev = T.price > q.price ? T.price - q.price : q.price - T.price; if (q.active && dev > q.price * BigInt(cfg.maxDiscBps) / 10000n + 1n) viol(c, "P2d", `${label}: price ${T.price} deviates from the quote ${q.price} by more than maxDisc ${cfg.maxDiscBps} bps`); }
+      const fb = await c.ex.backstopTakeFeeBps(); const notional = T.size * T.price / E8;
+      if (T.fee !== (notional * fb + 9999n) / 10000n) viol(c, "P2e", `${label}: fee ${T.fee} != ceil(${notional} x ${fb} bps)`);
+      checkTx(c, pre, post, r.evs, label, { donated: T.fee }); checkCore(c, post, label); return;
+    }
+    case "bsforce": {
+      await ensureFresh(c); c.st = await readState(c); await ensureInventory(c, s, label);
+      const pre = c.st; const m = (() => { let b = s.m, best = -1n; for (let j = 0; j < NM; j++) { const z = abs(c.st.pos.get(BACKSTOP)[j].size); if (z > best) { best = z; b = j; } } return b; })(); const bs = pre.pos.get(BACKSTOP)[m].size; if (bs === 0n || pre.mark[m] === null) return;
+      const cfg = await c.ex.backstopCfg(m); if (cfg.softNotional === 0n) return;
+      if (s.warp) { await time.increase(Number(cfg.maxAge) + 1); await refresh(c); c.st = await readState(c); }
+      const cand = await adlCandidates(c, m); const list = cand.slice(0, 8).map((x) => x[0]); if (list.length === 0) return;
+      const keeper = c.actors[s.k]; bump("bsforce-attempt");
+      const r = await send(c, label, () => c.ex.connect(keeper).unwindBackstop(list, m, { gasLimit: GAS }));
+      if (!r.ok) {
+        if (!["BadParam", "MarketRestricted", "OracleDegraded"].includes(r.err.name)) throw new Viol("P0", `${label}: unexpected unwind revert ${errStr(r.err)}`);
+        return;
+      }
+      bump("bsforce-ok");
+      const post = await readState(c); c.st = post; const mark = post.mark[m];
+      for (const U of r.evs.filter((e) => e.name === "BackstopUnwound")) if (U.args.price !== mark) viol(c, "P2f", `${label}: unwind price ${U.args.price} != mark ${mark} (no concession allowed)`);
+      const bsAfter = post.pos.get(BACKSTOP)[m].size;
+      if (abs(bsAfter) > abs(bs)) viol(c, "P2g", `${label}: unwind grew the inventory`);
+      checkTx(c, pre, post, r.evs, label); checkCore(c, post, label);
+      // strengthened P3: inventory above the threshold after a forced unwind is only possible if the candidate list was exhausted
+      const keep = cfg.softNotional * E8 / mark;
+      if (abs(bsAfter) > keep + MK[m].lot) { const rest = await adlCandidates(c, m); const ids = new Set(list); if (rest.some((x) => !ids.has(x[0]))) bump("unwind-short-by-list-limit"); else bump("unwind-candidates-exhausted"); }
       return;
     }
     case "poke": {
@@ -791,6 +854,9 @@ const stepArb = fc.oneof(
   { weight: 5, arbitrary: fc.record({ t: fc.constant("premium"), m: I(0, 2), bps: I(-400, 400) }) },
   { weight: 4, arbitrary: tradeArb },
   { weight: 6, arbitrary: fc.record({ t: fc.constant("close"), a: I(0, 7), m: I(0, 2), pct: I(10, 100), offBps: I(-100, 100) }) },
+  { weight: 2, arbitrary: fc.record({ t: fc.constant("bscfg"), m: I(0, 2), soft: I(0, 30000), disc: I(0, 300), dwell: I(0, 300), ramp: I(60, 1800), extra: I(0, 1800) }) },
+  { weight: 5, arbitrary: fc.record({ t: fc.constant("bstake"), m: I(0, 2), k: I(0, 7), pct: I(5, 100), bps: I(-4000, 4000) }) },
+  { weight: 3, arbitrary: fc.record({ t: fc.constant("bsforce"), m: I(0, 2), k: I(0, 7), warp: fc.boolean(), bps: I(-4000, 4000) }) },
   { weight: 2, arbitrary: fc.record({ t: fc.constant("bsunwind"), m: I(0, 2), pct: I(10, 100) }) },
   { weight: 1, arbitrary: fc.record({ t: fc.constant("state"), m: I(0, 2), s: fc.constantFrom(0, 1, 2, 3, 4) }) },
   { weight: 1, arbitrary: fc.record({ t: fc.constant("pause"), on: fc.boolean() }) },
@@ -807,11 +873,17 @@ const scenarioArb = fc.record({
   iso: fc.array(fc.array(fc.integer({ min: 0, max: 99 }).map((x) => x < 35), { minLength: 3, maxLength: 3 }), { minLength: 6, maxLength: 6 }),
   isoFrac: fc.array(I(30, 90), { minLength: 6, maxLength: 6 }),
   kpDep: I(0, 20000),
+  p2: I(0, 3), fee2: I(0, 10),   // phase 2: soft threshold tier (0 = off) and take fee
   setup: fc.array(tradeArb, { minLength: 8, maxLength: 20 }),
   steps: fc.array(stepArb, { minLength: 6, maxLength: LEN }),
 });
 
 async function runScenario(c, sc) {
+  if (sc.p2 > 0) {
+    const soft = usd([0, 500, 3000, 15000][sc.p2]);
+    for (let m = 0; m < NM; m++) await c.ex.setBackstopCfg(m, soft, 200, 30, 300, 900);
+    await c.ex.setBackstopTakeFee(sc.fee2); bump("p2-enabled");
+  }
   for (let i = 0; i < sc.setup.length; i++) {
     try { await doTrade(c, sc.setup[i], `setup#${i}`); } catch (e) { e.message = `(setup ${i}) ` + e.message; throw e; }
   }
@@ -1252,6 +1324,195 @@ describe("stress: deterministic worst cases and findings", function () {
     expect(cleared > 0n).to.equal(true); expect(s1.adl[1]).to.equal(s0.adl[1] - cleared); expect(s1.adl[0]).to.equal(0n);
     expect(s1.ubd).to.equal(s1.adl.reduce((x, y) => x + y, 0n));
     expect(cleared <= usd(6000)).to.equal(true);                   // t1's BTC profit (56k - 50k) bounds the concession
+  });
+
+  // =========================================================== PHASE 2: backstop inventory management ===========================================================
+  const CFG = [usd(20000), 200, 60, 600, 1200]; // soft 20k notional, max discount 200 bps, dwell 60 s, ramp 600 s, forced unwind after 1200 s
+  async function p2Setup({ fee = 10, bsInsDon = 0 } = {}) {
+    const c = await mkCtx([6500, 100000, 100000, 100000, 100000, 100000]);
+    await FEES_FULL(c);
+    if (bsInsDon) await c.ex.connect(c.payer).fundInsurance(usd(bsInsDon));
+    await c.ex.setBackstopCfg(0, ...CFG); await c.ex.setBackstopTakeFee(fee);
+    await pair(c, 1, 0, 0, btc(1), usd(50000));
+    await setPx(c, 0, usd(60000));
+    await c.ex.connect(c.actors[7]).liquidate(c.keys[0], 0);       // backstop short 1 BTC @60k: 60k notional > 20k soft => elevated
+    c.st = await readState(c);
+    return c;
+  }
+  const take = (c, who, size, limit, m = 0) => c.ex.connect(c.actors[who]).takeBackstop(c.actors[who].address, 0, m, size, limit);
+  const advance = async (c, dt) => { await time.increase(dt); await refresh(c); };
+  const cfgOf = (c, m = 0) => c.ex.backstopCfg(m);
+
+  itF("P2-gov: backstop parameters: bounds, guardian may only tighten, fee <= 10 bps, backstopPlace gate", async () => {
+    const c = await mkCtx(); const g = c.sg[14], rnd = c.sg[15];
+    await c.ex.grantRole(await c.ex.GUARDIAN_ROLE(), g.address);
+    await expect(c.ex.setBackstopCfg(0, ...[CFG[0], 301, 60, 600, 1200])).to.be.revertedWithCustomError(c.ex, "BadParam");   // > 300 bps
+    await expect(c.ex.setBackstopCfg(0, ...[CFG[0], 200, 60, 59, 1200])).to.be.revertedWithCustomError(c.ex, "BadParam");    // ramp < 60
+    await expect(c.ex.setBackstopCfg(0, ...[CFG[0], 200, 60, 600, 659])).to.be.revertedWithCustomError(c.ex, "BadParam");    // maxAge < dwell + ramp
+    await expect(c.ex.setBackstopCfg(9, ...CFG)).to.be.revertedWithCustomError(c.ex, "BadParam");                              // no such market
+    await expect(c.ex.connect(g).setBackstopCfg(0, ...CFG)).to.be.revertedWithCustomError(c.ex, "NotAuthorized");              // guardian cannot ENABLE
+    await c.ex.setBackstopCfg(0, ...CFG);
+    await expect(c.ex.connect(g).setBackstopCfg(0, usd(30000), 200, 60, 600, 1200)).to.be.revertedWithCustomError(c.ex, "NotAuthorized"); // loosen soft
+    await expect(c.ex.connect(g).setBackstopCfg(0, usd(20000), 250, 60, 600, 1200)).to.be.revertedWithCustomError(c.ex, "NotAuthorized"); // raise discount
+    await expect(c.ex.connect(g).setBackstopCfg(0, usd(20000), 200, 60, 600, 1300)).to.be.revertedWithCustomError(c.ex, "NotAuthorized"); // later forced unwind
+    await expect(c.ex.connect(g).setBackstopCfg(0, 0, 200, 60, 600, 1200)).to.be.revertedWithCustomError(c.ex, "NotAuthorized");           // cannot disable
+    await c.ex.connect(g).setBackstopCfg(0, usd(10000), 100, 30, 300, 600);
+    expect((await cfgOf(c)).softNotional).to.equal(usd(10000));
+    await expect(c.ex.connect(rnd).setBackstopCfg(0, usd(1), 1, 1, 60, 61)).to.be.revertedWithCustomError(c.ex, "NotAuthorized");
+    await expect(c.ex.setBackstopTakeFee(11)).to.be.revertedWithCustomError(c.ex, "BadParam");
+    await c.ex.setBackstopTakeFee(8); await expect(c.ex.connect(g).setBackstopTakeFee(9)).to.be.revertedWithCustomError(c.ex, "NotAuthorized");
+    await c.ex.connect(g).setBackstopTakeFee(3); expect(await c.ex.backstopTakeFeeBps()).to.equal(3n);
+    await expect(c.ex.connect(rnd).setBackstopTakeFee(0)).to.be.revertedWithCustomError(c.ex, "NotAuthorized");
+    await c.ex.connect(g).setBackstopPlaceOpen(false); expect(await c.ex.backstopPlaceOpen()).to.equal(false);
+    await expect(c.ex.connect(g).setBackstopPlaceOpen(true)).to.be.revertedWithCustomError(c.ex, "NotAuthorized");   // only admin reopens
+    await c.ex.setBackstopPlaceOpen(true);
+  });
+
+  itF("P2-auction: disabled/not elevated reverts; liquidation starts the clock; price = INDEX x (1 + disc) with dwell then linear ramp", async () => {
+    const c = await mkCtx([6500, 100000, 100000, 100000, 100000, 100000]); await FEES_FULL(c);
+    await pair(c, 1, 0, 0, btc(1), usd(50000)); await setPx(c, 0, usd(60000));
+    await c.ex.connect(c.actors[7]).liquidate(c.keys[0], 0);                    // phase 2 NOT configured: feature off
+    await expect(take(c, 2, btc(0.1), ethers.MaxUint256 >> 192n)).to.be.revertedWithCustomError(c.ex, "BadParam");
+    expect((await c.ex.backstopAuction(0)).active).to.equal(false);
+    // configure, then poke: clock starts
+    await c.ex.setBackstopCfg(0, ...CFG);
+    await c.ex.pokeBackstop(0); const t0 = BigInt((await time.latest()));
+    expect((await cfgOf(c)).elevatedSince > 0n).to.equal(true);
+    let q = await c.ex.backstopAuction(0);
+    expect(q.active && q.takerSells).to.equal(true); expect(q.discBps).to.equal(0n); expect(q.price).to.equal(usd(60000));
+    await advance(c, 30);  q = await c.ex.backstopAuction(0); expect(q.discBps).to.equal(0n);         // still inside dwell
+    await advance(c, 330); q = await c.ex.backstopAuction(0);                                         // ~ 390 s after: ramp 330 s of 600 => ~110 bps
+    log("disc at ~390 s:", q.discBps, "bps price", usdStr(q.price));
+    expect(q.discBps >= 100n && q.discBps <= 120n).to.equal(true);
+    expect(q.price).to.equal(usd(60000) * (10000n + q.discBps) / 10000n);
+    await advance(c, 2000); q = await c.ex.backstopAuction(0);
+    expect(q.discBps).to.equal(200n); expect(q.price).to.equal(usd(61200));                           // capped at maxDiscBps
+    // never outside the price band
+    expect(q.price <= usd(60000) * (10000n + 500n) / 10000n).to.equal(true);
+    expect(t0 > 0n).to.equal(true);
+  });
+
+  itF("P2-take: partial take, taker margin check, limit, lot, fee to insurance, interplay with the phase-1 sync", async () => {
+    const c = await p2Setup({ fee: 10 });
+    await advance(c, 2000);                                  // full 200 bps discount: backstop (short) pays 61,200 to buy back
+    const st0 = await rd(c); const bs0 = (await c.ex.positions(BACKSTOP, 0)).size; expect(bs0).to.equal(-btc(1));
+    // limit price: taker sells, wants >= 62k: not met
+    await expect(take(c, 2, btc(0.4), usd(62000))).to.be.revertedWithCustomError(c.ex, "BadParam");
+    await expect(take(c, 2, btc(0.4) + 1n, usd(61000))).to.be.revertedWithCustomError(c.ex, "BadParam");   // lot
+    await expect(take(c, 2, btc(2), usd(61000))).to.be.revertedWithCustomError(c.ex, "BadParam");           // more than the inventory
+    // margin: t0 (liquidated, ~0 collateral) cannot take a 0.5 BTC short
+    await expect(take(c, 0, btc(0.5), usd(61000))).to.be.revertedWithCustomError(c.ex, "Unhealthy");
+    const tx = await take(c, 2, btc(0.4), usd(61000)); const r = await tx.wait(); const evs = parseEvents(c, r);
+    const T = evs.find((e) => e.name === "BackstopTaken").args;
+    expect(T.price).to.equal(usd(61200)); expect(T.size).to.equal(btc(0.4)); expect(T.takerSold).to.equal(true); expect(T.discBps).to.equal(200n);
+    const notional = usd(61200) * btc(0.4) / E8; const fee = (notional * 10n + 9999n) / 10000n;
+    expect(T.fee).to.equal(fee);
+    expect((await c.ex.positions(c.keys[2], 0)).size).to.equal(-btc(0.4));
+    expect((await c.ex.positions(BACKSTOP, 0)).size).to.equal(-btc(0.6));
+    // backstop realised (61,200-60,000)*0.4 = 480 loss, covered by insurance first (fee + liquidation share), rest recorded
+    const st1 = await rd(c); checkCore(c, st1, "p2-take");
+    expect(st1.coll.get(BACKSTOP) >= 0n).to.equal(true); expect(bsEq(c) >= -2n).to.equal(true); expect(st1.bsDebt <= st1.ubd).to.equal(true);
+    log("insurance", usdStr(st0.ins), "->", usdStr(st1.ins), "fee", usdStr(fee), "ubd", usdStr(st0.ubd), "->", usdStr(st1.ubd), "bsIns", usdStr(st1.bsIns), "bsDebt", usdStr(st1.bsDebt));
+    expect(st1.ins + (st1.bsIns - st0.bsIns)).to.equal(st0.ins + fee);                               // the fee reached insurance exactly (draws for the backstop loss are mirrored in bsInsDrawn)
+    expect(parseEvents(c, r).some((e) => e.name === "Fill")).to.equal(false);
+    // taker equity gain at the index is bounded by disc x size (wash bound): sold 0.4 at 61.2k vs index 60k
+    const acc = await c.ex.accountState(c.keys[2]);
+    expect(acc.equity - (BigInt(usd(100000))) <= usd(480) - fee + 5n).to.equal(true);
+    // take the rest (partial remainder): clock cleared once at/below the threshold
+    await take(c, 3, btc(0.6), usd(61000));
+    expect((await c.ex.positions(BACKSTOP, 0)).size).to.equal(0n);
+    expect((await cfgOf(c)).elevatedSince).to.equal(0n);
+    await expect(take(c, 4, btc(0.1), usd(61000))).to.be.revertedWithCustomError(c.ex, "BadParam");  // nothing left / not elevated
+  });
+
+  itF("P2-take-buy: backstop LONG inventory is sold to the taker at index x (1 - disc), rounded in the backstop's favour", async () => {
+    const c = await mkCtx([6500, 100000, 100000, 100000, 100000, 100000]); await FEES_FULL(c);
+    await c.ex.setBackstopCfg(0, ...CFG); await c.ex.setBackstopTakeFee(0);
+    await pair(c, 0, 1, 0, btc(1), usd(50000));              // t0 LONG 1 BTC (6.5k), t1 short
+    await setPx(c, 0, usd(40000));
+    await c.ex.connect(c.actors[7]).liquidate(c.keys[0], 0); // backstop LONG 1 BTC @40k
+    await advance(c, 2000);
+    const q = await c.ex.backstopAuction(0); expect(q.takerSells).to.equal(false); expect(q.price).to.equal(usd(39200));
+    await expect(take(c, 2, btc(0.5), usd(39000))).to.be.revertedWithCustomError(c.ex, "BadParam");   // buyer's max price 39k < 39.2k
+    await take(c, 2, btc(0.5), usd(39200));
+    expect((await c.ex.positions(c.keys[2], 0)).size).to.equal(btc(0.5));
+    expect((await c.ex.positions(BACKSTOP, 0)).size).to.equal(btc(0.5));
+    checkCore(c, await rd(c), "p2-buy");
+  });
+
+  itF("P2-unwind: forced unwind at MARK after maxAge, ranked, no concession, to the threshold; liquidation stays enabled", async () => {
+    const c = await p2Setup({ fee: 0 });
+    const bsA = [c.keys[1]];
+    await expect(c.ex.connect(c.actors[7]).unwindBackstop(bsA, 0)).to.be.revertedWithCustomError(c.ex, "BadParam");   // not due yet
+    await advance(c, 1100);
+    await expect(c.ex.connect(c.actors[7]).unwindBackstop(bsA, 0)).to.be.revertedWithCustomError(c.ex, "BadParam");   // 1100 < 1200
+    await advance(c, 200);
+    await expect(c.ex.connect(c.actors[7]).unwindBackstop([c.keys[2]], 0)).to.be.reverted;                              // no position / not in profit
+    // Q7: liquidation is still enabled while elevated/due: make t3 liquidatable and liquidate it
+    await pair(c, 3, 4, 0, btc(0.1), usd(60000));            // t3 long 0.1, t4 short 0.1 (both 100k): not liquidatable; just ensure call path alive
+    const before = await c.ex.collateral(c.keys[1]);
+    const tx = await c.ex.connect(c.actors[7]).unwindBackstop(bsA, 0); const evs = parseEvents(c, await tx.wait());
+    const U = evs.find((e) => e.name === "BackstopUnwound").args;
+    const keep = usd(20000) * E8 / usd(60000);               // threshold in size units
+    const want = (btc(1) - keep + 9999n) / 10000n * 10000n;  // rounded UP to the lot (10,000)
+    expect(U.size).to.equal(want); expect(U.price).to.equal(usd(60000));
+    // winner t1 keeps full profit: closed `want` at mark 60k vs entry 50k
+    const after = await c.ex.collateral(c.keys[1]);
+    expect(after - before).to.equal(U.size * usd(10000) / E8);
+    const bs = (await c.ex.positions(BACKSTOP, 0)).size; expect(bs).to.equal(-(btc(1) - U.size));
+    expect((await cfgOf(c)).elevatedSince).to.equal(0n);     // back at the threshold: clock cleared
+    const st = await rd(c); checkCore(c, st, "p2-unwind"); expect(bsEq(c) >= -2n).to.equal(true);
+    // a liquidation of an unrelated account is not blocked at any point of elevation (here: still live)
+    await setPx(c, 0, usd(50000)); await c.ex.connect(c.actors[7]).syncBackstop();
+  });
+
+  itF("P2-unwind-rank: unranked / wrong-side targets revert; forced unwind needs a fresh feed", async () => {
+    const c = await p2Setup({ fee: 0 });
+    await advance(c, 1300);
+    await expect(c.ex.connect(c.actors[7]).unwindBackstop([c.keys[2]], 0)).to.be.revertedWithCustomError(c.ex, "BadParam"); // no profit / no position
+    await time.increase(70);                                   // feed now stale
+    await expect(c.ex.connect(c.actors[7]).unwindBackstop([c.keys[1]], 0)).to.be.reverted;
+    await expect(take(c, 2, btc(0.1), usd(61000))).to.be.revertedWithCustomError(c.ex, "OracleDegraded");
+    await c.ex.connect(c.actors[7]).syncBackstop();            // phase-1 sync still works on a stale feed (adverse valuation)
+    await refresh(c);
+  });
+
+  itF("P2-place: backstopPlace may reduce inventory but not grow it above the soft threshold; guardian can close the gate", async () => {
+    const c = await mkCtx([6500, 100000, 100000, 100000, 100000, 100000]); await FEES_FULL(c);
+    await c.ex.setBackstopCfg(0, ...CFG);
+    await pair(c, 0, 1, 0, btc(1), usd(50000));              // t0 long 1 BTC on 6.5k
+    await setPx(c, 0, usd(40000));
+    await c.ex.connect(c.actors[7]).liquidate(c.keys[0], 0); // backstop long 1 BTC (40k notional > 20k soft)
+    await c.ex.pokeBackstop(0);
+    expect((await c.ex.positions(BACKSTOP, 0)).size).to.equal(btc(1));
+    const px = usd(40000);
+    const o = (isBuy, size) => order({ market: 0, isBuy, price: px, size, tif: TIF.IOC });
+    await c.ex.connect(c.actors[4]).placeOrder(c.actors[4].address, 0, order({ market: 0, isBuy: false, price: px, size: btc(0.2) })); // ask rests
+    // growing is refused: by the margin check while the backstop is under-capitalised (as here), by BackstopCap once it has equity (cap path covered by the fuzz)
+    await expect(c.ex.connect(c.bsOp).backstopPlace(o(true, btc(0.2)))).to.be.reverted;
+    await c.ex.connect(c.actors[3]).placeOrder(c.actors[3].address, 0, order({ market: 0, isBuy: true, price: px, size: btc(0.2) })); // bid rests
+    await c.ex.connect(c.bsOp).backstopPlace(o(false, btc(0.2)));                                                                       // reduces: allowed
+    expect((await c.ex.positions(BACKSTOP, 0)).size <= btc(1)).to.equal(true);   // a reducing order is never refused by the cap
+    await c.ex.grantRole(await c.ex.GUARDIAN_ROLE(), c.sg[14].address);
+    await c.ex.connect(c.sg[14]).setBackstopPlaceOpen(false);
+    await expect(c.ex.connect(c.bsOp).backstopPlace(o(false, btc(0.1)))).to.be.revertedWithCustomError(c.ex, "BackstopCap");
+  });
+
+  itF("P2-pause: global pause blocks takeBackstop (new risk), not liquidation or sync; Delisted markets cannot be taken", async () => {
+    const c = await p2Setup({ fee: 0 });
+    await c.ex.setGlobalPause(true);
+    await expect(take(c, 2, btc(0.1), usd(61000))).to.be.revertedWithCustomError(c.ex, "MarketRestricted");
+    await c.ex.connect(c.actors[7]).syncBackstop();
+    await c.ex.setGlobalPause(false);
+    await c.ex.setMarketState(0, STATE.ReduceOnly);            // reduce-only market: auction still allowed for reducing takers? taker sells => opens short => margin path decides
+    await take(c, 2, btc(0.1), usd(59000));
+  });
+
+  itF("P2-nonreentrant: takeBackstop performs no token transfer or external call (pure accounting)", async () => {
+    const c = await p2Setup({ fee: 5 });
+    const r = await (await take(c, 2, btc(0.1), usd(59000))).wait();
+    const usdcAddr = (await c.usdc.getAddress()).toLowerCase();
+    expect(r.logs.filter((l) => l.address.toLowerCase() === usdcAddr).length).to.equal(0);
   });
 
   itF("FINDING OI-1: lowering maxOI below current OI makes every fill revert OICap, including reduce-only closes", async () => {

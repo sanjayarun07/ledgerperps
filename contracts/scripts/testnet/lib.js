@@ -88,15 +88,52 @@ function loadConfig(file = CONFIG_PATH) { return JSON.parse(fs.readFileSync(file
 function saveConfig(cfg, file = CONFIG_PATH) { fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n"); }
 
 /** Every on-chain reference in the config. Used by validation, verify-addresses and verify-gate. */
-function addressRefs(cfg) {
+function addressRefs(cfg, mode = "median") {
   const refs = [];
   refs.push({ label: "USDC", node: cfg.usdc });
-  refs.push({ label: "Pyth", node: cfg.pyth });
+  if (mode === "median") refs.push({ label: "Pyth", node: cfg.pyth }); // chainlink mode does not use Pyth at all
   for (const m of cfg.markets) {
     if (m.chainlink) refs.push({ label: `${m.name} Chainlink`, node: m.chainlink });
-    if (m.pyth) refs.push({ label: `${m.name} Pyth feed`, node: m.pyth, isFeedId: true });
+    if (m.pyth && mode === "median") refs.push({ label: `${m.name} Pyth feed`, node: m.pyth, isFeedId: true });
   }
   return refs;
+}
+
+const ORACLE_MODES = ["median", "chainlink"];
+/** Oracle mode for deploy/verification: ORACLE_MODE env (median|chainlink) overrides cfg.oracle.mode (default 'chainlink'). Anything else throws. */
+function resolveOracleMode(cfg, env = process.env) {
+  const v = env.ORACLE_MODE || (cfg.oracle && cfg.oracle.mode) || "chainlink";
+  if (!ORACLE_MODES.includes(v)) throw new Error(`ORACLE_MODE must be one of ${ORACLE_MODES.join("|")} (got "${v}"); 'manual' exists only with --local-simulate`);
+  return v;
+}
+/** Optional DEMO-USD market: DEMO_MARKET=no|yes overrides cfg.demo.enabled. */
+function demoEnabled(cfg, env = process.env) {
+  if (env.DEMO_MARKET === "no") return false;
+  if (env.DEMO_MARKET === "yes") return true;
+  return !!(cfg.demo && cfg.demo.enabled);
+}
+/** Markets to create, in marketId order: real feeds first, then the demo market (always the last id, so real ids never shift). */
+function marketsToCreate(cfg, { demo }) {
+  return cfg.markets.filter((m) => (m.oracleMode === "demo" ? demo : true));
+}
+/** Pure recommendation used by verify-addresses.js: 'median' only if EVERY Pyth feed age is known and <= freshSecs. */
+function recommendOracleMode(pythAgesSecs, freshSecs) {
+  if (!pythAgesSecs.length || pythAgesSecs.some((a) => !Number.isFinite(a))) return { mode: "chainlink", reason: "Pyth age unknown for at least one feed" };
+  const worst = Math.max(...pythAgesSecs);
+  return worst <= freshSecs ? { mode: "median", reason: `all Pyth feeds fresh (worst age ${worst}s <= ${freshSecs}s)` } : { mode: "chainlink", reason: `Pyth stale (worst age ${worst}s > ${freshSecs}s) and nothing is pushing` };
+}
+
+/** setBackstopCfg bounds (mirror PerpLiquidation.setBackstopCfg). Returns problems; values are numbers/strings from the config. */
+function backstopCfgProblems(name, c, bandBps) {
+  const p = [];
+  if (!c) return [`${name}: no backstop config`];
+  try { if (!(BigInt(c.softNotional) > 0n) || BigInt(c.softNotional) >= (1n << 128n)) p.push(`${name}: softNotional must be 1..2^128-1 (micro-USDC)`); } catch { p.push(`${name}: softNotional is not an integer`); }
+  const mx = Math.min(300, Number(bandBps));
+  if (!(Number.isInteger(c.maxDiscBps) && c.maxDiscBps >= 0 && c.maxDiscBps <= mx)) p.push(`${name}: maxDiscBps must be 0..${mx} (min(300, bandBps))`);
+  for (const f of ["dwell", "ramp", "maxAge"]) if (!(Number.isInteger(c[f]) && c[f] >= 0 && c[f] < 2 ** 32)) p.push(`${name}: ${f} must be a uint32`);
+  if (c.ramp < 60) p.push(`${name}: ramp must be >= 60`);
+  if (c.maxAge < c.dwell + c.ramp) p.push(`${name}: maxAge must be >= dwell + ramp`);
+  return p;
 }
 
 function validateConfig(cfg) {
@@ -114,15 +151,19 @@ function validateConfig(cfg) {
   const seen = new Set();
   (cfg.markets || []).forEach((m, i) => {
     if (m.marketId !== i) errs.push(`${m.name}: marketId must equal its index (${i})`);
+    if (m.oracleMode === "demo" && i !== cfg.markets.length - 1) errs.push(`${m.name}: the demo market must be the LAST market so real market ids never shift`);
     if (seen.has(m.name)) errs.push(`duplicate market ${m.name}`); seen.add(m.name);
     if (!B32_RE.test(m.feedId || "")) errs.push(`${m.name}: feedId malformed`);
-    if (!["median", "manual"].includes(m.oracleMode)) errs.push(`${m.name}: oracleMode must be median|manual`);
+    if (!["median", "manual", "demo"].includes(m.oracleMode)) errs.push(`${m.name}: oracleMode must be median|manual|demo`);
+    if (m.oracleMode === "demo" && !(m.demo === true && typeof m.label === "string" && /DEMO/.test(m.label))) errs.push(`${m.name}: demo market must set demo:true and a label containing "DEMO"`);
     if (m.oracleMode === "median" && !(m.chainlink && m.pyth)) errs.push(`${m.name}: median mode needs both chainlink and pyth`);
     for (const f of ["tick", "lot", "minNotional", "maxOrderSize", "maxOI", "maxAge", "bandBps", "maxSpreadBps", "fundingInterval", "premiumDivisor", "fundingCap"])
       if (m.params?.[f] === undefined) errs.push(`${m.name}: params.${f} missing`);
     if (!Array.isArray(m.params?.tiers) || !m.params.tiers.length) errs.push(`${m.name}: params.tiers missing`);
   });
   if (!cfg.oracle || cfg.oracle.medianMaxAgeSecs === undefined) errs.push("oracle.medianMaxAgeSecs missing");
+  if (cfg.oracle && cfg.oracle.mode !== undefined && !ORACLE_MODES.includes(cfg.oracle.mode)) errs.push(`oracle.mode must be ${ORACLE_MODES.join("|")}`);
+  if (cfg.backstop) for (const m of cfg.markets) if (cfg.backstop[m.name]) errs.push(...backstopCfgProblems(m.name, cfg.backstop[m.name], m.params?.bandBps));
   return errs;
 }
 
@@ -141,9 +182,9 @@ function configHash(cfg) {
 }
 
 /** For broadcast: every reference actually used must have been verified on-chain recently. */
-function verificationProblems(cfg, maxAgeHours = 24, now = Date.now()) {
+function verificationProblems(cfg, maxAgeHours = 24, now = Date.now(), mode = "median") {
   const probs = [];
-  for (const r of addressRefs(cfg)) {
+  for (const r of addressRefs(cfg, mode)) {
     const v = r.node.verifiedOnChain;
     if (!v || v.ok !== true) probs.push(`${r.label}: not verified on-chain (run verify-addresses.js)`);
     else if (now - Date.parse(v.checkedAt) > maxAgeHours * 3600e3) probs.push(`${r.label}: verification older than ${maxAgeHours}h`);
@@ -179,4 +220,4 @@ function table(rows) {
 
 module.exports = { ARB_SEPOLIA_CHAIN_ID, HARDHAT_CHAIN_ID, DEFAULT_PUBLIC_RPC, EIP170, CONFIG_PATH, DEPLOYMENT_PATH, ADDR_RE, B32_RE,
   normalizeKey, hygieneProblems, redact, assertDeployerMatch, expectedDeployer, assertChainId, broadcastGate, requireSigner, loadConfig, saveConfig, addressRefs, validateConfig, configHash,
-  verificationProblems, marketCreateArgs, gitCommit, isLocalSimulate, table };
+  verificationProblems, ORACLE_MODES, resolveOracleMode, demoEnabled, marketsToCreate, recommendOracleMode, backstopCfgProblems, marketCreateArgs, gitCommit, isLocalSimulate, table };

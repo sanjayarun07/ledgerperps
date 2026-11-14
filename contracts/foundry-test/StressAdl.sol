@@ -77,6 +77,72 @@ contract StressAdl is Test {
         K.track();
     }
 
+    // ---------------------------------------------------------------- phase 2: soft threshold, Dutch auction, forced unwind
+    function p2cfg(uint256 mS, uint256 softS, uint256 discS) external {
+        uint8 m = uint8(mS % NM);
+        uint128 soft = uint128(bound(softS, 0, 20_000) * 1e6);
+        (bool ok,) = _call("p2cfg", address(this), abi.encodeWithSignature("setBackstopCfg(uint8,uint128,uint16,uint32,uint32,uint32)", m, soft, uint16(bound(discS, 0, 300)), uint32(30), uint32(300), uint32(900)));
+        if (!ok) K.flag("P0", "setBackstopCfg reverted"); // address(this) holds the admin role
+        _call("p2fee", address(this), abi.encodeWithSignature("setBackstopTakeFee(uint32)", uint32(bound(discS, 0, 10))));
+    }
+    function take(uint256 kS, uint256 mS, uint256 pct) external {
+        _fresh();
+        uint8 m = uint8(mS % NM); address a = _a(kS); int256 bs0 = posK(BACK, m);
+        if (bs0 == 0) return;
+        (bool active, bool sells, uint256 qp,, uint256 qsz) = abi.decode(_view(abi.encodeWithSignature("backstopAuction(uint8)", m)), (bool, bool, uint256, uint256, uint256));
+        uint256 lot = _lot(m);
+        uint256 size = (qsz * bound(pct, 1, 100) / 100) / lot * lot; if (size == 0) size = lot;
+        uint256 ins0 = ex.insurance(); vm.recordLogs();
+        (bool ok, bytes memory ret) = _call("take", a, abi.encodeWithSignature("takeBackstop(address,uint8,uint8,uint128,uint64)", a, uint8(0), m, uint128(size), sells ? uint64(1) : type(uint64).max));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        if (!ok) {
+            bytes4 s = _sel(ret);
+            if (s != PerpBase.BadParam.selector && s != PerpBase.Unhealthy.selector && s != PerpBase.MarketRestricted.selector && s != PerpBase.OracleDegraded.selector && s != PerpBase.OICap.selector) K.flag("P0", "takeBackstop: unexpected revert");
+            return;
+        }
+        if (!active) K.flag("P2", "take succeeded while the auction was not active");
+        bytes32 t = keccak256("BackstopTaken(uint8,address,bytes32,bool,uint128,uint64,uint256,uint256)");
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(ex) || logs[i].topics[0] != t) continue;
+            (, uint128 sz, uint64 pr, uint256 disc, uint256 fee) = abi.decode(logs[i].data, (bool, uint128, uint64, uint256, uint256));
+            if (disc > 300) K.flag("P2", "auction discount above 300 bps");
+            uint256 dev = pr > qp ? pr - qp : qp - pr;
+            if (dev * 10_000 > qp * 300 + 10_000) K.flag("P2", "auction price strayed more than 300 bps from the quote");
+            if (fee * 10_000 > uint256(sz) * pr / 1e8 * 10 + 10_000) K.flag("P2", "take fee above 10 bps");
+            if (ex.insurance() + 1e6 < ins0) { /* sync may draw insurance for the backstop loss: allowed */ }
+            int256 bs1 = posK(BACK, m);
+            if (uint256(bs1 < 0 ? -bs1 : bs1) + sz != uint256(bs0 < 0 ? -bs0 : bs0)) K.flag("P2", "take did not move the inventory by exactly size");
+        }
+        K.track();
+    }
+    function force(uint256 kS, uint256 mS, bool warpPast) external {
+        _fresh();
+        uint8 m = uint8(mS % NM); int256 bs0 = posK(BACK, m);
+        if (bs0 == 0) return;
+        if (warpPast) { vm.warp(block.timestamp + 901); _fresh(); }
+        bytes32[] memory list = _rank(m, 8); if (list.length == 0) return;
+        uint256 mark; try px.markPrice(m) returns (uint256 mk) { mark = mk; } catch { return; }
+        vm.recordLogs();
+        (bool ok, bytes memory ret) = _call("force", _a(kS), abi.encodeWithSignature("unwindBackstop(bytes32[],uint8)", list, m));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        if (!ok) {
+            bytes4 s = _sel(ret);
+            if (s != PerpBase.BadParam.selector && s != PerpBase.MarketRestricted.selector && s != PerpBase.OracleDegraded.selector) K.flag("P0", "unwindBackstop: unexpected revert");
+            return;
+        }
+        bytes32 t = keccak256("BackstopUnwound(uint8,bytes32,uint128,uint64)");
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(ex) || logs[i].topics[0] != t) continue;
+            (, uint64 pr) = abi.decode(logs[i].data, (uint128, uint64));
+            if (pr != mark) K.flag("P2", "forced unwind not at mark");
+        }
+        int256 bs1 = posK(BACK, m);
+        if (uint256(bs1 < 0 ? -bs1 : bs1) > uint256(bs0 < 0 ? -bs0 : bs0)) K.flag("P2", "forced unwind grew the inventory");
+        K.track();
+    }
+    function _view(bytes memory data) internal view returns (bytes memory r) { (bool ok, bytes memory out) = address(ex).staticcall(data); require(ok); r = out; }
+    function _lot(uint256 m) internal pure returns (uint256 l) { l = m == 0 ? 10_000 : m == 1 ? 100_000 : 1_000_000; }
+
     function deposit(uint256 aS, uint256 amt) external { address a = _a(aS); amt = bound(amt, 1e6, 5_000e6); _call("deposit", a, abi.encodeCall(PerpExchange.deposit, (a, 0, amt))); K.track(); }
     function withdraw(uint256 aS, uint256 amt) external { address a = _a(aS); _fresh(); _call("withdraw", a, abi.encodeCall(PerpExchange.withdraw, (0, bound(amt, 1e6, 30_000e6)))); K.track(); }
     function rebalance(uint256 pct, bool back) external {

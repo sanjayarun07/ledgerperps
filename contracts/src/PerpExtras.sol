@@ -22,7 +22,13 @@ contract PerpExtras is PerpBase {
 
     /// @notice (moved from PerpTrading to stay under EIP-170; selector unchanged) Backstop operator order.
     function backstopPlace(OrderParams calldata p) external nonReentrant onlyRole(BACKSTOP_ROLE) returns (uint64 id, uint128 filled) {
-        return IPlacer(address(this)).placeFor(BACKSTOP, p);
+        if (!backstopPlaceOpen) revert BackstopCap();
+        int256 b0 = positions[BACKSTOP][p.market].size;
+        (id, filled) = IPlacer(address(this)).placeFor(BACKSTOP, p);
+        // phase 2: the discretionary operator may reduce inventory freely but may not grow it beyond the market's soft threshold
+        uint128 soft = backstopCfg[p.market].softNotional;
+        int256 b1 = positions[BACKSTOP][p.market].size;
+        if (soft != 0 && _abs(b1) > _abs(b0) && _notionalFloor(_abs(b1), markPrice(p.market)) > soft) revert BackstopCap();
     }
 
     /// @notice (moved from PerpTrading; selector unchanged) Atomic cancel + new order. The new order ALWAYS takes a fresh queue position.

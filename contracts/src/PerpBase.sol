@@ -181,6 +181,19 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
     uint256 public wdGateThreshold = 100e6; // withdrawal limiter: active while unresolvedBadDebt > this (1e6 USDC)
     mapping(bytes32 => uint256) public principal; // deposited (not earned) collateral still withdrawable while the limiter is active
 
+    // ---- backstop inventory management, phase 2 (docs/BACKSTOP_DESIGN.md design (a)-lite). softNotional == 0 disables it for the market. ----
+    struct BackstopCfg {
+        uint128 softNotional;   // |backstop inventory| x mark (1e6 USDC) above which the market is "elevated"
+        uint16 maxDiscBps;      // max auction discount from the INDEX; <= min(bandBps, 300)
+        uint32 dwell;           // seconds after elevation with discount 0
+        uint32 ramp;            // seconds to ramp from 0 to maxDiscBps after dwell
+        uint32 maxAge;          // seconds of continuous elevation after which forced unwind (ADL at mark) is allowed
+        uint64 elevatedSince;   // 0 = not elevated
+    }
+    mapping(uint8 => BackstopCfg) public backstopCfg;
+    uint32 public backstopTakeFeeBps;   // taker fee on takeBackstop, to insurance (0..10)
+    bool public backstopPlaceOpen = true; // discretionary backstopPlace allowed (guardian may close it, only admin may reopen)
+
     // params
     uint32 public takerFeeBps = 5;
     int32 public makerFeeBps = 1; // negative = rebate
@@ -202,6 +215,10 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
     event Liquidated(bytes32 indexed acct, uint8 indexed market, address indexed keeper, uint128 size, uint64 price, uint256 fee, uint256 badDebt);
     event BadDebtUnresolved(bytes32 indexed acct, uint256 amount); // ADL would be required (NOT IMPLEMENTED)
     event BackstopSynced(int256 equityBefore, uint256 fromInsurance, uint256 toDebt, uint8 indexed market, uint256 refundedInsurance, uint256 repaidDebt);
+    event BackstopElevated(uint8 indexed market, uint256 notional);
+    event BackstopRelaxed(uint8 indexed market);
+    event BackstopTaken(uint8 indexed market, address indexed taker, bytes32 acct, bool takerSold, uint128 size, uint64 price, uint256 discBps, uint256 fee);
+    event BackstopUnwound(uint8 indexed market, bytes32 indexed target, uint128 size, uint64 price);
     event FundingUpdated(uint8 indexed market, uint256 intervals, int256 rate, int256 newIndex);
     event FundingSettled(bytes32 indexed acct, uint8 indexed market, int256 owed);
     event MarketState(uint8 indexed market, State s);
@@ -226,6 +243,7 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
     error NotLiquidatable();
     error Expired();
     error WithdrawGated();
+    error BackstopCap();
     bytes32 constant ORDER_TYPEHASH = keccak256(
         "OrderAction(address owner,uint8 sub,uint8 market,bool isBuy,uint64 price,uint128 size,uint8 tif,bool reduceOnly,uint64 cloid,uint64 expiry,uint256 nonce,uint256 deadline)"
     );
@@ -452,6 +470,17 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
             if (rDebt > 0) { bsDebt -= rDebt; unresolvedBadDebt -= rDebt; _clearAdlDebt(255, rDebt); }
             emit BackstopSynced(eq, 0, 0, 0, rIns, rDebt);
         }
+    }
+
+    /// @dev Lazily maintains the per-market elevation clock: starts when |backstop inventory| x mark exceeds the soft threshold,
+    ///      clears when it is back at or below it. Called wherever inventory changes or is observed with a fresh mark.
+    function _refreshElev(uint8 m, uint256 mk) internal {
+        BackstopCfg storage c = backstopCfg[m];
+        if (c.softNotional == 0) { if (c.elevatedSince != 0) c.elevatedSince = 0; return; }
+        uint256 n = _notionalFloor(_abs(positions[BACKSTOP][m].size), mk);
+        if (n > c.softNotional) {
+            if (c.elevatedSince == 0) { c.elevatedSince = uint64(block.timestamp); emit BackstopElevated(m, n); }
+        } else if (c.elevatedSince != 0) { c.elevatedSince = 0; emit BackstopRelaxed(m); }
     }
 
     function _marginOK(bytes32 a, uint8 m) internal view returns (bool) {
