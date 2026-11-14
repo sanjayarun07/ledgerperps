@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useApp, type OrderTab } from "@/lib/app";
 import { publicClient } from "@/lib/client";
-import { CHAIN_ID, EXCHANGE, exchangeAbi, IS_LOCAL } from "@/lib/config";
+import { CHAIN_ID, DEMO_BANNER, DEMO_TAG, EXCHANGE, exchangeAbi, IS_LOCAL, MARKETS, NETWORK } from "@/lib/config";
+import { switchLabel } from "@/lib/network";
 import { buildOrderParams, slippagePrice, suggestSize, validateBracket, validateTicket, validateTwap, type TifName } from "@/lib/order";
 import { quoteToBase, sizeFromPercent } from "@/lib/terminal";
 import { allowedActions, canPlace } from "@/lib/marketRules";
@@ -45,7 +46,7 @@ function Side({ isBuy, set }: { isBuy: boolean; set: (b: boolean) => void }) {
 function useBlockedReason() {
   const { w } = useCtx();
   if (!w.address) return "Connect wallet to trade";
-  if (w.wrongChain) return "Switch your wallet to the exchange network";
+  if (w.wrongChain) return NETWORK.kind === "local" ? "Switch your wallet to the exchange network" : switchLabel(NETWORK);
   return null;
 }
 
@@ -237,6 +238,7 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
 
   return (
     <>
+      {MARKETS[market]?.demo && <p className="callout warn" role="note" data-testid="demo-banner"><b>{DEMO_TAG}.</b> {DEMO_BANNER}</p>}
       <div className="chiprow" aria-label="Risk setup">
         <Popover label="Margin mode" chip={modeChip}>
           <p className="hint"><b>{modeChip}</b> margin on {name}. Cross shares one pool of collateral across positions; isolated gives this market its own margin, so the most you can lose on it is that margin.</p>

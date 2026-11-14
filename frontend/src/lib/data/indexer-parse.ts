@@ -167,7 +167,11 @@ export function parseBackstopEvents(data: unknown): SolvencyEvent[] {
       const d = n(o.from_insurance) + n(o.to_debt);
       out.push(d > 0n ? { ...base, kind: "backstop_deficit", market: typeof o.market === "number" ? o.market : null, acct: null, amount: d } : { ...base, kind: "backstop_repaid", market: null, acct: null, amount: n(o.refunded_insurance) + n(o.repaid_debt) });
     } else if (kind === "adl_skipped") out.push({ ...base, kind: "adl_skipped", market: typeof o.market === "number" ? o.market : null, acct: typeof o.target === "string" ? (o.target as Hex) : null, amount: n(o.slack) });
-    else if (kind !== "adl_hard_prem_set" && kind !== "withdraw_gate_set") bad(`unknown backstop event kind ${kind}`);
+    else if (kind === "backstop_elevated") out.push({ ...base, kind: "backstop_elevated", market: typeof o.market === "number" ? o.market : null, acct: null, amount: n(o.notional) });
+    else if (kind === "backstop_relaxed") out.push({ ...base, kind: "backstop_relaxed", market: typeof o.market === "number" ? o.market : null, acct: null, amount: 0n });
+    else if (kind === "backstop_taken") out.push({ ...base, kind: "backstop_taken", market: typeof o.market === "number" ? o.market : null, acct: typeof o.acct === "string" ? (o.acct as Hex) : null, amount: n(o.size), size: n(o.size), price: typeof o.price === "number" ? BigInt(o.price) : null });
+    else if (kind === "backstop_unwound") out.push({ ...base, kind: "backstop_unwound", market: typeof o.market === "number" ? o.market : null, acct: typeof o.target === "string" ? (o.target as Hex) : null, amount: n(o.size), size: n(o.size), price: typeof o.price === "number" ? BigInt(o.price) : null });
+    else if (!["adl_hard_prem_set", "withdraw_gate_set", "backstop_cfg_set", "backstop_place_open_set", "backstop_take_fee_set"].includes(kind)) bad(`unknown backstop event kind ${kind}`);
   }
   return out;
 }

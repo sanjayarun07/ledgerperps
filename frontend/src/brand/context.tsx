@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { disclaimerText, type BrandConfig } from "./schema";
+import { NETWORK } from "@/lib/config";
 import { dockTabs, navLinks, ticketOptions, visibleMarkets } from "./gate";
 
 interface BrandCtx { brand: BrandConfig; real: boolean }
@@ -14,7 +15,7 @@ export function useBrand() {
   const { brand, real } = c;
   return useMemo(() => ({
     brand, features: brand.features, markets: visibleMarkets(brand.markets.order), dockTabs: dockTabs(brand.features), nav: navLinks(brand.features), ticket: ticketOptions(brand.features),
-    banner: disclaimerText(brand, real), real, collateral: brand.integrations.collateral,
+    banner: disclaimerText(brand, real, NETWORK), real, collateral: brand.integrations.collateral,
   }), [brand, real]);
 }
 /** Track an analytics event. No-op unless the tenant enabled analytics AND set an endpoint; sends only the event name. */

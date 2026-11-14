@@ -1,7 +1,7 @@
 "use client";
 import { useApp } from "@/lib/app";
 import { useBrand } from "@/brand/context";
-import { MARKETS } from "@/lib/config";
+import { DEMO_TAG, MARKETS } from "@/lib/config";
 import { useFunding, useIndexPrice, useMarketInfo, useMark, useChainClock, useStats24h } from "@/lib/queries";
 import { fmtDuration, fmtPrice, fmtRatePct, formatFixed } from "@/lib/units";
 import { MARKET_STATES } from "@/lib/order";
@@ -34,10 +34,11 @@ export default function MarketBar() {
       <label className="pair">
         <span className="coin" aria-hidden>{m.base.slice(0, 1)}</span>
         <select aria-label="Market" value={market} onChange={(e) => setMarket(Number(e.target.value))}>
-          {markets.map((x) => <option key={x.id} value={x.id}>{x.name.replace("-", " / ")}</option>)}
+          {markets.map((x) => <option key={x.id} value={x.id}>{x.name.replace("-", " / ")}{x.demo ? ` (${DEMO_TAG})` : ""}</option>)}
         </select>
       </label>
       <span className="tagpill">Perpetual</span>
+      {m.demo && <span className="tagpill" data-testid="demo-tag" title="This market is priced by the deployer account, not a real feed.">{DEMO_TAG}</span>}
       <div className="bigprice num" aria-label="Last price">
         <Val v={px ? fmtPrice(px) : mark.isLoading ? undefined : "stale"} w={110} />
         <small>{last ? "Last trade" : "Mark (no trades yet)"}</small>

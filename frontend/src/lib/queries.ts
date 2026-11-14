@@ -34,6 +34,7 @@ export function useBook(m: number, depth = 16): { data: Book | undefined; isLoad
 export const useTrades = (m: number) => useQuery({ queryKey: ["trades", m], queryFn: () => ds.getTrades(m, 60), ...opts, refetchInterval: 3000 });
 export const useCandles = (m: number, iv: number) => useQuery({ queryKey: ["candles", m, iv], queryFn: () => ds.getCandles(m, iv), ...opts, refetchInterval: 4000 });
 export const useFunding = (m: number) => useQuery({ queryKey: ["funding", m], queryFn: () => ds.getFunding(m), ...opts });
+export const useBackstop = (market: number) => useQuery({ queryKey: ["backstop", market], queryFn: () => ds.getBackstop(market), ...opts, refetchInterval: 4000 });
 export const useHealth = () => useQuery({ queryKey: ["health"], queryFn: () => ds.getHealth(), ...opts, refetchInterval: 4000 });
 export const useWithdrawGate = (a?: Hex) => useQuery({ queryKey: ["wdgate", a], queryFn: () => ds.getWithdrawGate(a!), enabled: !!a, ...opts, refetchInterval: 4000 });
 export const useSolvency = () => useQuery({ queryKey: ["solvency"], queryFn: () => ds.getSolvency(), ...opts, refetchInterval: 4000 });

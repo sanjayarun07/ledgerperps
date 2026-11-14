@@ -1,5 +1,6 @@
 "use client";
-import { DEPLOYED, MARKETS, RPC_URL } from "@/lib/config";
+import { DEPLOYED, MARKETS, NETWORK, RPC_URL } from "@/lib/config";
+import { oracleDegradedText, switchLabel } from "@/lib/network";
 import { DemoBanner } from "@/components/BrandBits";
 import { useApp } from "@/lib/app";
 import { focusTarget } from "@/lib/focus";
@@ -20,18 +21,18 @@ export default function Banners() {
   if (sys.data?.globalPaused) alerts.push({ cls: "bad", title: "The whole exchange is paused.", body: "New orders are blocked everywhere. You can still cancel orders and add collateral.", act: { label: "Show my orders", run: () => focusTarget("orders") } });
   const stale = (sys.data?.markets ?? []).filter((m) => !m.oracleOk);
   if (stale.length)
-    alerts.push({ cls: "warn", title: `Degraded: the price feed is stale for ${stale.map((m) => MARKETS[m.id].name).join(", ")}${stale.some((m) => m.id === market) ? " (including the selected market)" : ""}.`, body: "With no fresh price, new orders are rejected and withdrawals are blocked while you hold a position in an affected market. You can still cancel orders and add collateral. Trading resumes after the next oracle update.", act: { label: "Show my orders", run: () => focusTarget("orders") } });
+    alerts.push({ cls: "warn", title: `Degraded: the price feed is stale for ${stale.map((m) => MARKETS[m.id].name).join(", ")}${stale.some((m) => m.id === market) ? " (including the selected market)" : ""}.`, body: `${NETWORK.kind === "local" ? "With no fresh price, new orders are rejected and withdrawals are blocked while you hold a position in an affected market. You can still cancel orders and add collateral. Trading resumes after the next oracle update." : oracleDegradedText() + " Withdrawals are blocked while you hold a position in an affected market."}`, act: { label: "Show my orders", run: () => focusTarget("orders") } });
   for (const m of sys.data?.markets ?? []) {
     const name = MARKETS[m.id].name;
     const sel = m.id === market ? " (selected market)" : "";
     if (!m.oracleOk) continue;
     else if (m.state === 3) alerts.push({ cls: "bad", title: `${name} is paused${sel}.`, body: "New orders are blocked. You can still cancel orders and add collateral.", act: { label: "Show my orders", run: () => focusTarget("orders") } });
     else if (m.state === 1) alerts.push({ cls: "warn", title: `${name} is reduce-only${sel}.`, body: "You can only place orders that shrink an existing position. You can still close positions, cancel orders and add collateral.", act: { label: "Show positions", run: () => focusTarget("positions") } });
-    else if (m.state === 2) alerts.push({ cls: "warn", title: `${name}: price feed degraded${sel}.`, body: "New orders are blocked until the oracle recovers. You can still cancel orders and add collateral." });
+    else if (m.state === 2) alerts.push({ cls: "warn", title: `${name}: price feed degraded${sel}.`, body: NETWORK.kind === "local" ? "New orders are blocked until the oracle recovers. You can still cancel orders and add collateral." : oracleDegradedText() });
     else if (m.state === 5) alerts.push({ cls: "bad", title: `${name} is delisted${sel}.`, body: "The market is closed at its settlement price. No new orders; you can still cancel orders and withdraw free collateral." });
     else if (m.state === 4) alerts.push({ cls: "info", title: `${name} is recovering${sel}.`, body: `Market state: ${MARKET_STATES[m.state]}. Trading is limited until it returns to normal.` });
   }
-  if (w.wrongChain) alerts.push({ cls: "warn", title: "Your wallet is on the wrong network.", body: "Switch to the exchange network before sending any transaction.", act: { label: "Switch network", run: () => void w.switchChain() } });
+  if (w.wrongChain) alerts.push({ cls: "warn", title: `Your wallet is on the wrong network. Trading is disabled until you switch to ${NETWORK.shortName}.`, body: "Switch to the exchange network before sending any transaction.", act: { label: switchLabel(NETWORK), run: () => void w.switchChain() } });
   return (
     <>
       <DemoBanner />

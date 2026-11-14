@@ -3,7 +3,8 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 import { useQueryClient } from "@tanstack/react-query";
 import { parseEventLogs, type Abi, type Address, type Hex, type TransactionReceipt } from "viem";
 import { publicClient } from "./client";
-import { EXCHANGE, exchangeAbi } from "./config";
+import { EXCHANGE, exchangeAbi, IS_LOCAL } from "./config";
+import { isRateLimit, nextPollDelay } from "./network";
 import { explainError } from "./errors";
 import { friendlyClient, type ErrorContext, type Friendly } from "./messages";
 import { cancelReasonText } from "./order";
@@ -40,6 +41,18 @@ const Ctx = createContext<TxCtx | null>(null);
 export const useTx = () => { const c = useContext(Ctx); if (!c) throw new Error("TxProvider missing"); return c; };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/** Receipt wait with backoff. Local: fast and short. Testnet: slower chain and rate-limited public RPC, so back off and keep going for 3 minutes. */
+async function waitReceipt(hash: Hex): Promise<TransactionReceipt> {
+  const deadline = Date.now() + (IS_LOCAL ? 60_000 : 180_000);
+  for (let attempt = 0; ; attempt++) {
+    let limited = false;
+    try { return await publicClient.getTransactionReceipt({ hash }); }
+    catch (e) { if (!/not.?found|could not be found/i.test(String((e as Error)?.message ?? e)) && !isRateLimit(e)) throw e; limited = isRateLimit(e); }
+    if (Date.now() > deadline) throw new Error("Timed out waiting for the receipt");
+    await new Promise((r) => setTimeout(r, IS_LOCAL ? 500 : nextPollDelay(attempt, limited)));
+  }
+}
+
 export function parseExchangeEvents(receipt: TransactionReceipt): ChainEvent[] {
   const logs = receipt.logs.filter((l) => l.address.toLowerCase() === EXCHANGE.toLowerCase());
   try { return (parseEventLogs({ abi: exchangeAbi, logs }) as any[]).map((e) => ({ name: e.eventName as string, args: (e.args ?? {}) as Record<string, unknown> })); } catch { return []; }
@@ -66,6 +79,10 @@ export function describeEvents(receipt: TransactionReceipt): string[] {
       case "AgentApproved": if (a.expiry === 0n) return `AgentRevoked ${String(a.agent).slice(0, 8)}…`; return `AgentApproved ${String(a.agent).slice(0, 8)}… until ${new Date(Number(a.expiry) * 1000).toLocaleString()}`;
       case "BadDebtUnresolved": return `BadDebtUnresolved ${fmtUsd(a.amount)} USDC (loss not covered by the insurance fund; deleveraging or recapitalization is needed)`;
       case "BackstopSynced": return (a.fromInsurance as bigint) + (a.toDebt as bigint) > 0n ? `BackstopSynced: backstop loss recorded ${fmtUsd((a.fromInsurance as bigint) + (a.toDebt as bigint))} USDC (insurance ${fmtUsd(a.fromInsurance)}, bad debt ${fmtUsd(a.toDebt)})` : `BackstopSynced: earlier backstop draws repaid ${fmtUsd((a.refundedInsurance as bigint) + (a.repaidDebt as bigint))} USDC`;
+      case "BackstopElevated": return `BackstopElevated market ${a.market}: inventory ${fmtUsd(a.notional)} USDC is above its cap, the discount auction has started`;
+      case "BackstopRelaxed": return `BackstopRelaxed market ${a.market}: inventory is back under its cap`;
+      case "BackstopTaken": return `BackstopTaken market ${a.market}: ${a.takerSold ? "sold" : "bought"} ${fmtSize(a.size)} at ${fmtPrice(a.price)} (${a.discBps} bps from index, fee ${fmtUsd(a.fee)} USDC)`;
+      case "BackstopUnwound": return `BackstopUnwound market ${a.market}: closed ${fmtSize(a.size)} at ${fmtPrice(a.price)}`;
       case "AdlSkipped": return `AdlSkipped market ${a.market}: target had no margin slack`;
       case "Recapitalized": return `Recapitalized market ${a.market}: ${fmtUsd(a.amount)} USDC`;
       case "AdlExecuted": return `AdlExecuted market ${a.market}: debt cleared ${fmtUsd(a.debtCleared)}`;
@@ -107,7 +124,7 @@ export function TxProvider({ children }: { children: ReactNode }) {
     } catch (e) { patch(id, { state: "failed", error: explainError(e, r.ctx) }); return "failed"; }
     patch(id, { state: "submitted", hash });
     try {
-      const receipt = await publicClient.waitForTransactionReceipt({ hash, pollingInterval: 500, timeout: 60_000 });
+      const receipt = await waitReceipt(hash);
       patch(id, { state: "included", block: receipt.blockNumber, gasUsed: receipt.gasUsed });
       if (receipt.status === "success") {
         patch(id, { state: "executed", events: describeEvents(receipt), outcome: summarizeOrder(parseExchangeEvents(receipt), w.acct) });

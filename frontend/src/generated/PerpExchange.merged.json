@@ -20,6 +20,11 @@
   },
   {
     "type": "error",
+    "name": "BackstopCap",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadParam",
     "inputs": [
       {
@@ -165,6 +170,35 @@
   {
     "type": "event",
     "anonymous": false,
+    "name": "BackstopElevated",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "notional",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "anonymous": false,
+    "name": "BackstopRelaxed",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "anonymous": false,
     "name": "BackstopSynced",
     "inputs": [
       {
@@ -195,6 +229,80 @@
       {
         "type": "uint256",
         "name": "repaidDebt",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "anonymous": false,
+    "name": "BackstopTaken",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "taker",
+        "indexed": true
+      },
+      {
+        "type": "bytes32",
+        "name": "acct",
+        "indexed": false
+      },
+      {
+        "type": "bool",
+        "name": "takerSold",
+        "indexed": false
+      },
+      {
+        "type": "uint128",
+        "name": "size",
+        "indexed": false
+      },
+      {
+        "type": "uint64",
+        "name": "price",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "discBps",
+        "indexed": false
+      },
+      {
+        "type": "uint256",
+        "name": "fee",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "anonymous": false,
+    "name": "BackstopUnwound",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      },
+      {
+        "type": "bytes32",
+        "name": "target",
+        "indexed": true
+      },
+      {
+        "type": "uint128",
+        "name": "size",
+        "indexed": false
+      },
+      {
+        "type": "uint64",
+        "name": "price",
         "indexed": false
       }
     ]
@@ -1181,6 +1289,73 @@
       }
     ],
     "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "backstopCfg",
+    "constant": true,
+    "stateMutability": "view",
+    "payable": false,
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": ""
+      }
+    ],
+    "outputs": [
+      {
+        "type": "uint128",
+        "name": "softNotional"
+      },
+      {
+        "type": "uint16",
+        "name": "maxDiscBps"
+      },
+      {
+        "type": "uint32",
+        "name": "dwell"
+      },
+      {
+        "type": "uint32",
+        "name": "ramp"
+      },
+      {
+        "type": "uint32",
+        "name": "maxAge"
+      },
+      {
+        "type": "uint64",
+        "name": "elevatedSince"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "backstopPlaceOpen",
+    "constant": true,
+    "stateMutability": "view",
+    "payable": false,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "bool",
+        "name": ""
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "backstopTakeFeeBps",
+    "constant": true,
+    "stateMutability": "view",
+    "payable": false,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "uint32",
+        "name": ""
+      }
+    ]
   },
   {
     "type": "function",
@@ -3453,6 +3628,67 @@
   {
     "type": "event",
     "anonymous": false,
+    "name": "BackstopCfgSet",
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market",
+        "indexed": true
+      },
+      {
+        "type": "uint128",
+        "name": "softNotional",
+        "indexed": false
+      },
+      {
+        "type": "uint16",
+        "name": "maxDiscBps",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "dwell",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "ramp",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "maxAge",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "anonymous": false,
+    "name": "BackstopPlaceOpenSet",
+    "inputs": [
+      {
+        "type": "bool",
+        "name": "open",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "anonymous": false,
+    "name": "BackstopTakeFeeSet",
+    "inputs": [
+      {
+        "type": "uint32",
+        "name": "bps",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "anonymous": false,
     "name": "DelistedSettled",
     "inputs": [
       {
@@ -3474,6 +3710,41 @@
         "type": "uint64",
         "name": "price",
         "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "backstopAuction",
+    "constant": true,
+    "stateMutability": "view",
+    "payable": false,
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "bool",
+        "name": "active"
+      },
+      {
+        "type": "bool",
+        "name": "takerSells"
+      },
+      {
+        "type": "uint256",
+        "name": "price"
+      },
+      {
+        "type": "uint256",
+        "name": "discBps"
+      },
+      {
+        "type": "uint256",
+        "name": "size"
       }
     ]
   },
@@ -3510,6 +3781,78 @@
   },
   {
     "type": "function",
+    "name": "pokeBackstop",
+    "constant": false,
+    "payable": false,
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "market"
+      }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "setBackstopCfg",
+    "constant": false,
+    "payable": false,
+    "inputs": [
+      {
+        "type": "uint8",
+        "name": "m"
+      },
+      {
+        "type": "uint128",
+        "name": "soft"
+      },
+      {
+        "type": "uint16",
+        "name": "maxDisc"
+      },
+      {
+        "type": "uint32",
+        "name": "dwell"
+      },
+      {
+        "type": "uint32",
+        "name": "ramp"
+      },
+      {
+        "type": "uint32",
+        "name": "maxAge"
+      }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "setBackstopPlaceOpen",
+    "constant": false,
+    "payable": false,
+    "inputs": [
+      {
+        "type": "bool",
+        "name": "open"
+      }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "setBackstopTakeFee",
+    "constant": false,
+    "payable": false,
+    "inputs": [
+      {
+        "type": "uint32",
+        "name": "bps"
+      }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
     "name": "settleDelisted",
     "constant": false,
     "payable": false,
@@ -3531,6 +3874,35 @@
     "constant": false,
     "payable": false,
     "inputs": [],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "takeBackstop",
+    "constant": false,
+    "payable": false,
+    "inputs": [
+      {
+        "type": "address",
+        "name": "owner"
+      },
+      {
+        "type": "uint8",
+        "name": "sub"
+      },
+      {
+        "type": "uint8",
+        "name": "market"
+      },
+      {
+        "type": "uint128",
+        "name": "size"
+      },
+      {
+        "type": "uint64",
+        "name": "limitPx"
+      }
+    ],
     "outputs": []
   },
   {
@@ -3987,6 +4359,23 @@
       {
         "type": "uint256",
         "name": "amount"
+      }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "unwindBackstop",
+    "constant": false,
+    "payable": false,
+    "inputs": [
+      {
+        "type": "bytes32[]",
+        "name": "targets"
+      },
+      {
+        "type": "uint8",
+        "name": "market"
       }
     ],
     "outputs": []

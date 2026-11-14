@@ -53,3 +53,11 @@ describe("WithdrawGated (backstop phase 1)", () => {
     expect(friendlyFromContract("WithdrawGated").detail).toContain("up to the amount you deposited");
   });
 });
+
+describe("BackstopCap (backstop phase 2)", () => {
+  it("is a known custom error with a plain explanation", () => {
+    const f = friendlyFromContract("BackstopCap");
+    expect(f.title).toBe("Backstop is at its inventory limit");
+    expect(f.detail).toMatch(/Your own orders and positions are not affected/);
+  });
+});

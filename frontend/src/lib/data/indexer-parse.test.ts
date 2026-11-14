@@ -177,3 +177,19 @@ describe("backstop events", () => {
     expect(() => parseBackstopEvents([row({ kind: "mystery" })])).toThrow(/unknown backstop event kind/);
   });
 });
+
+describe("backstop phase 2 events", () => {
+  const tx = "0x" + "ab".repeat(32);
+  const row = (o: object) => ({ market: 0, target: null, block: 7, log_index: 0, ts: 9, tx_hash: tx, ...o });
+  it("maps elevated, relaxed, taken and unwound rows and ignores config rows", () => {
+    const ev = parseBackstopEvents([
+      row({ kind: "backstop_elevated", notional: "2000000" }), row({ kind: "backstop_relaxed" }),
+      row({ kind: "backstop_taken", acct: "0x" + "22".repeat(32), size: "50000000", price: 49900000000, taker_sold: false }),
+      row({ kind: "backstop_unwound", target: "0x" + "33".repeat(32), size: "10000000", price: 50000000000 }),
+      row({ kind: "backstop_cfg_set", soft_notional: "1" }), row({ kind: "backstop_place_open_set", open: false }), row({ kind: "backstop_take_fee_set", bps: 5 }),
+    ]);
+    expect(ev.map((e) => [e.kind, e.amount, e.price])).toEqual([
+      ["backstop_elevated", 2000000n, null], ["backstop_relaxed", 0n, null], ["backstop_taken", 50000000n, 49900000000n], ["backstop_unwound", 10000000n, 50000000000n],
+    ]);
+  });
+});

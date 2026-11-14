@@ -1,3 +1,4 @@
+import { bannerText } from "@/lib/network";
 import { z } from "zod";
 import { HEX } from "./color";
 
@@ -79,7 +80,9 @@ export const safeParseBrand = (input: unknown) => { const r = BrandSchema.safePa
 /** Mandatory notice. Tenants can only extend it, unless the operator declares a real deployment. */
 export const BASE_BANNER = "LOCAL DEMO - mock USDC, manual oracle, not real liquidity";
 export const BASE_NOTICE = "Unaudited prototype contracts: do not use with real funds.";
-export function disclaimerText(b: BrandConfig, realDeployment: boolean): string {
-  if (realDeployment && b.disclaimer.override) return b.disclaimer.override;
-  return b.disclaimer.extra ? `${BASE_BANNER}. ${b.disclaimer.extra}` : BASE_BANNER;
+/** Banner for the current network. `override` replaces it only on a declared real deployment (never on testnet: the testnet banner cannot be hidden). */
+export function disclaimerText(b: BrandConfig, realDeployment: boolean, net: Parameters<typeof bannerText>[0] = { kind: "local", shortName: "Local" }): string {
+  if (realDeployment && net.kind !== "testnet" && b.disclaimer.override) return b.disclaimer.override;
+  const base = net.kind === "local" ? BASE_BANNER : bannerText(net);
+  return b.disclaimer.extra ? `${base}. ${b.disclaimer.extra}` : base;
 }

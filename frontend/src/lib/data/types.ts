@@ -31,11 +31,18 @@ export interface AgentInfo { agent: Hex; expiry: bigint }
 export interface SystemStatus { globalPaused: boolean; markets: { id: number; state: number; markPrice: bigint | null; oracleOk: boolean }[]; blockNumber: bigint; blockTime: number }
 export interface AdlScore { market: number; /** null when the mark price is unavailable; 2^256-1 means equity <= 0 (first in line) */ score: bigint | null }
 export interface SolvencyEvent {
-  kind: "adl" | "recapitalized" | "bad_debt_unresolved" | "liquidation_bad_debt" | "backstop_deficit" | "backstop_repaid" | "adl_skipped"; market: number | null; acct: Hex | null;
+  kind: "adl" | "recapitalized" | "bad_debt_unresolved" | "liquidation_bad_debt" | "backstop_deficit" | "backstop_repaid" | "adl_skipped" | "backstop_elevated" | "backstop_relaxed" | "backstop_taken" | "backstop_unwound"; market: number | null; acct: Hex | null;
   amount: bigint; size: bigint | null; price: bigint | null; block: bigint; time: number; txHash: Hex;
 }
 /** Exchange-wide health from chain views only (null = view unavailable). */
 export interface ExchangeHealth { unresolvedBadDebt: bigint; bsDebt: bigint | null; insurance: bigint; backstopEquity: bigint | null; gateThreshold: bigint | null; gateActive: boolean | null }
+/** Backstop Phase 2 status for one market from chain views (null = view unavailable, e.g. an older deployment). `softNotional === 0n` = feature off. */
+export interface BackstopStatus {
+  market: number; softNotional: bigint | null; elevated: boolean | null;
+  /** |backstop position| x mark, micro-USDC; null when the position or mark is unavailable */
+  inventoryNotional: bigint | null;
+  auction: { active: boolean; takerSells: boolean; price: bigint; discBps: bigint; size: bigint } | null;
+}
 /** Withdrawal limiter state for one account: while `active`, withdrawing more than `principal` reverts `WithdrawGated`. */
 export interface WithdrawGate { principal: bigint | null; active: boolean | null; threshold: bigint | null; unresolvedBadDebt: bigint | null }
 export interface SolvencyInfo { insurance: bigint; unresolvedBadDebt: bigint; adlDebt: bigint[]; events: SolvencyEvent[]; source: "chain" | "indexer+chain" }
@@ -73,6 +80,7 @@ export interface DataSource {
   getAdlScores(acct: Hex): Promise<AdlScore[]>;
   getSolvency(): Promise<SolvencyInfo>;
   getHealth(): Promise<ExchangeHealth>;
+  getBackstop(market: number): Promise<BackstopStatus>;
   getWithdrawGate(acct: Hex): Promise<WithdrawGate>;
   /** null = this source cannot provide it (chain-only) */
   getPositionStats(acct: Hex): Promise<PositionStat[] | null>;

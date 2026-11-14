@@ -6,6 +6,9 @@ import { shortAddr } from "@/lib/units";
 import { useTx, type TxEntry } from "@/lib/tx";
 import { useUi } from "@/components/ui";
 import { lifecycle } from "@/lib/lifecycle";
+import { NETWORK } from "@/lib/config";
+import { confirmationsText, explorerTx, SIGN_ORDER_TEXT } from "@/lib/network";
+import { useSystem } from "@/lib/queries";
 
 /** The five visible stages. Nothing is ever shown as done before the receipt says so (no optimistic UI). */
 export const STAGES = ["Waiting for wallet", "Sent", "Included in block", "Confirmed on-chain"] as const;
@@ -35,9 +38,12 @@ export function Stages({ t }: { t: TxEntry }) {
 }
 
 export function TxBody({ t, compact }: { t: TxEntry; compact?: boolean }) {
+  const head = useSystem().data?.blockNumber;
   return (
     <>
       <Stages t={t} />
+      {t.state === "signing" && NETWORK.kind !== "local" && <small>{SIGN_ORDER_TEXT}</small>}
+      {t.hash && explorerTx(NETWORK, t.hash) && <small><a href={explorerTx(NETWORK, t.hash)} target="_blank" rel="noopener noreferrer">View on explorer</a>{t.block ? ` · ${confirmationsText(t.block, head)}` : ""}</small>}
       {t.hash && <small className="num">tx {shortAddr(t.hash)}{t.block ? ` · block ${t.block.toString()}` : ""}{t.gasUsed ? ` · gas ${t.gasUsed}` : ""}</small>}
       {t.state === "executed" && <small className="long">Confirmed on-chain: the receipt succeeded and the events below are the canonical result.</small>}
       {t.events.map((e, i) => <span key={i} className="ev">{e}</span>)}

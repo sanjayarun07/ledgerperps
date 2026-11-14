@@ -20,7 +20,7 @@ export interface ErrorContext {
 export const CUSTOM_ERRORS = [
   "AccessControlBadConfirmation", "AccessControlUnauthorizedAccount", "BadParam", "DuplicateClientId", "Expired", "FokUnfilled", "InvalidShortString",
   "MarketRestricted", "NotAuthorized", "NotLiquidatable", "OICap", "OracleDegraded", "PostOnlyCross", "PriceTooFarFromTop", "ReduceOnlyViolation",
-  "ReentrancyGuardReentrantCall", "SafeERC20FailedOperation", "StringTooLong", "TooManyOrders", "Unhealthy", "WithdrawGated",
+  "ReentrancyGuardReentrantCall", "SafeERC20FailedOperation", "StringTooLong", "TooManyOrders", "Unhealthy", "WithdrawGated", "BackstopCap",
 ] as const;
 
 const A = (label: string, target: ActionTarget): FixAction => ({ label, target });
@@ -90,6 +90,7 @@ export function friendlyFromContract(name: string, args: readonly unknown[] = []
       const up = ctx.principal !== undefined && ctx.fmtUsd ? ` You can withdraw up to ${ctx.fmtUsd(ctx.principal)} USDC.` : " You can still withdraw up to the amount you deposited.";
       return { code: name, title: "Withdrawal is temporarily limited", detail: `Withdrawals above your deposited amount are temporarily limited while the exchange has unresolved bad debt.${up}`, actions: [] };
     }
+    case "BackstopCap": return { code: name, title: "Backstop is at its inventory limit", detail: "The exchange's backstop already holds as much of this market as it is allowed to, so it cannot take more right now. Your own orders and positions are not affected; try again once its inventory has been reduced.", actions: [] };
     case "TooManyOrders": return { code: name, title: "Too many open orders", detail: "Cancel some resting orders, trigger orders or TWAPs before adding more.", actions: [A("Show open orders", "orders")] };
     case "PriceTooFarFromTop": return { code: name, title: "Price is too far from the market", detail: "The book can only place an order a limited number of price levels away from the best price. Move your price closer to the market.", actions: [A("Change price", "price")] };
     case "OICap": return { code: name, title: `Market is at its open-interest limit${mk}`, detail: "No more new exposure can be opened right now. You can still reduce or close positions. Try a smaller size or another market.", actions: [A("Reduce size", "size")] };

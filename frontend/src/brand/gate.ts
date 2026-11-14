@@ -1,4 +1,4 @@
-import { MARKETS } from "@/lib/config";
+import { MARKETS, type MarketDef } from "@/lib/config";
 import type { Features } from "./schema";
 
 /** Pure gating helpers: components render exactly what these return, so a disabled feature leaves no dead link, tab or option. */
@@ -15,6 +15,8 @@ export interface TicketOptions { advancedTab: boolean; tpsl: boolean; twap: bool
 export const ticketOptions = (f: Features): TicketOptions => ({ advancedTab: f.advancedTab, tpsl: f.conditionals, twap: f.twap && f.advancedTab, signedRelay: f.signedRelay && f.advancedTab, isolated: f.isolatedMargin, sessionKeys: f.agentKeys, subaccounts: f.subaccounts });
 /** Ordered, filtered market list from the tenant's `markets.order` (unknown ids are dropped). */
 export function visibleMarkets(order: readonly number[]) {
-  const out = order.map((id) => MARKETS.find((m) => m.id === id)).filter((m): m is (typeof MARKETS)[number] => !!m);
+  const out = order.map((id) => MARKETS.find((m) => m.id === id)).filter((m): m is MarketDef => !!m);
+  // A deployment-level demo market is always listed (a tenant order written before it existed would otherwise hide it).
+  for (const m of MARKETS) if (m.demo && !out.includes(m)) out.push(m);
   return out.length ? out : [...MARKETS];
 }

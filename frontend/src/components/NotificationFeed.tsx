@@ -54,6 +54,15 @@ export default function NotificationFeed() {
   useEffect(() => {
     if (!sol) return;
     for (const e of sol.events) {
+      if (e.kind === "backstop_elevated" || e.kind === "backstop_taken" || e.kind === "backstop_unwound") {
+        const bid = `backstop-${e.txHash}-${e.kind}-${e.block}`;
+        if (solSeen.current.has(bid)) continue;
+        solSeen.current.add(bid);
+        if (!solSeeded.current) continue;
+        const title = e.kind === "backstop_elevated" ? "Backstop inventory is above its cap" : e.kind === "backstop_taken" ? "Backstop inventory was taken from the auction" : "Backstop inventory was unwound";
+        pushNote({ id: bid, kind: "incident", title, body: e.kind === "backstop_elevated" ? "The exchange is selling its inventory at a growing discount. Your positions are not affected." : "Part of the exchange's inventory changed hands. Your positions are not affected." });
+        continue;
+      }
       if (e.kind !== "bad_debt_unresolved" && e.kind !== "liquidation_bad_debt" && e.kind !== "backstop_deficit") continue;
       const id = `baddebt-${e.txHash}-${e.kind}-${e.block}`;
       if (solSeen.current.has(id)) continue;

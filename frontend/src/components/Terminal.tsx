@@ -7,10 +7,11 @@ import { focusTarget } from "@/lib/focus";
 import { shortcutAction, SHORTCUTS } from "@/lib/terminal";
 import { useWallet } from "@/lib/wallet";
 import { useUi } from "@/components/ui";
-import { useChainClock, useFunding, useHealth, useIndexerStatus, useSystem } from "@/lib/queries";
+import { useBackstop, useChainClock, useFunding, useHealth, useIndexerStatus, useSystem } from "@/lib/queries";
 import { useTx } from "@/lib/tx";
-import { INDEXER_URL } from "@/lib/config";
-import { fmtDuration, fmtUsd } from "@/lib/units";
+import { EXCHANGE, INDEXER_URL, NETWORK } from "@/lib/config";
+import { explorerAddress, footerNetworkLabel } from "@/lib/network";
+import { fmtDuration, fmtPrice, fmtUsd } from "@/lib/units";
 import { useBrand } from "@/brand/context";
 import { NoticeLine } from "@/components/BrandBits";
 import { Icon } from "@/components/Icon";
@@ -104,17 +105,22 @@ function ChainStatus({ tone, text, onClose }: { tone: string; text: string; onCl
   const due = !!fund.data && next <= clock.now;
   const ms = sys?.markets.find((x) => x.id === market);
   const health = useHealth().data;
+  const bk = useBackstop(market).data;
   const usd = (v: bigint | null | undefined) => (v === null || v === undefined ? "-" : `${fmtUsd(v)} USDC`);
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, [onClose]);
   return (
     <div className="statuspop" role="dialog" aria-label="Chain status">
       <div className="kv"><span>Connection</span><span><i className={`dot ${tone}`} aria-hidden /> {text}</span></div>
+      <div className="kv"><span>Network</span><span>{footerNetworkLabel(NETWORK)}</span></div>
+      {explorerAddress(NETWORK, EXCHANGE) && <div className="kv"><span>Exchange contract</span><a href={explorerAddress(NETWORK, EXCHANGE)} target="_blank" rel="noopener noreferrer">View on explorer</a></div>}
       <div className="kv"><span>Latest block</span><span className="num">{sys ? sys.blockNumber.toString() : "-"}</span></div>
       <div className="kv"><span>Chain clock</span><span className="num">{clock.block !== null ? new Date(clock.now * 1000).toLocaleTimeString() : "-"}</span></div>
       <div className="kv"><span>{m.name} price feed</span><span>{ms ? (ms.oracleOk ? "Fresh" : "Stale") : "-"}</span></div>
       <div className="kv"><span>Unresolved bad debt</span><span className={`num ${health && health.unresolvedBadDebt > 0n ? "short" : ""}`}>{usd(health?.unresolvedBadDebt)}</span></div>
       <div className="kv"><span>Backstop equity</span><span className={`num ${health?.backstopEquity !== null && health?.backstopEquity !== undefined && health.backstopEquity < 0n ? "short" : ""}`}>{usd(health?.backstopEquity)}</span></div>
       <div className="kv"><span>Withdrawal limit</span><span>{health?.gateActive === null || health === undefined ? "-" : health.gateActive ? "Active (up to deposited amount)" : "Off"}</span></div>
+      <div className="kv" data-testid="backstop-status"><span>Backstop inventory</span><span className="num">{!bk || bk.softNotional === null ? "-" : bk.softNotional === 0n ? "limit not set" : `${usd(bk.inventoryNotional)} of ${usd(bk.softNotional)} limit`}</span></div>
+      <div className="kv" data-testid="backstop-auction"><span>Backstop auction</span><span className="num">{!bk || !bk.auction ? "-" : bk.auction.active ? `${bk.auction.takerSells ? "buying" : "selling"} at ${fmtPrice(bk.auction.price)} (${bk.auction.discBps.toString()} bps from index)` : bk.elevated ? "starting" : "idle"}</span></div>
       <div className="kv"><span>Next funding</span><span className="num">{fund.data ? (due ? "due now" : fmtDuration(next - clock.now)) : "-"}</span></div>
       <button id="poke-btn" className={`btn sm ${due ? "brand" : ""}`} disabled={!w.address || w.wrongChain} onClick={() => send({ label: `Update funding on ${m.name}`, functionName: "pokeFunding", args: [market] })}>Update funding on {m.name}</button>
       <p className="hint" style={{ margin: 0 }}>Anyone can trigger the funding update once the interval has passed.{!w.address ? " Connect a wallet to do it." : ""}</p>
@@ -143,6 +149,7 @@ export function Footer() {
       <button type="button" className="status" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(!open)}><i className={`dot ${tone}`} aria-hidden />{text}{sys.data ? <span className="num mute">block {sys.data.blockNumber.toString()}</span> : null}<span className="sr"> (open chain status)</span></button>
       {open && <ChainStatus tone={tone} text={text} onClose={() => setOpen(false)} />}
       {health && (health.unresolvedBadDebt > 0n || (health.backstopEquity !== null && health.backstopEquity < 0n)) && <span className="tradestate restricted" title="Losses exceeded the insurance fund. See the status popover and Account > Solvency." data-testid="baddebt-indicator"><Icon name="alert" size={12} />{health.gateActive ? "Bad debt: withdrawals limited" : "Bad debt outstanding"}</span>}
+      <span className="netlabel" title={`Network: ${NETWORK.name}`}>{footerNetworkLabel(NETWORK)}</span>
       <span className={`tradestate ${rules?.open ? "" : "restricted"}`} title={rules?.notice ?? "New orders are accepted in this market."}>{rules && !rules.open ? <Icon name="alert" size={12} /> : null}{tradeText}</span>
       <div className="sp" />
       {[["Support", brand.links.support], ["Docs", brand.links.docs], ["Status", brand.links.status], ["Terms", brand.links.terms], ["Privacy", brand.links.privacy], ...brand.social.map((x) => [x.label, x.url] as const)].filter(([, u]) => u).map(([l, u]) => <a key={l} className="navlink" href={u} target="_blank" rel="noreferrer noopener">{l}</a>)}

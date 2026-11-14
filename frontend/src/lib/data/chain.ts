@@ -3,7 +3,7 @@ import { publicClient as pc } from "../client";
 import { EXCHANGE, exchangeAbi, MARKETS } from "../config";
 import { abs } from "../units";
 import { LogScanner, type ScanLog } from "./logscan";
-import type { ExchangeHealth, WithdrawGate, AdlScore, AgentInfo, Candle, Conditional, DataSource, FundingPayment, LedgerEvent, MarketInfo, OpenOrder, PositionInfo, SolvencyEvent, SolvencyInfo, SystemStatus, Trade, Twap } from "./types";
+import type { BackstopStatus, ExchangeHealth, WithdrawGate, AdlScore, AgentInfo, Candle, Conditional, DataSource, FundingPayment, LedgerEvent, MarketInfo, OpenOrder, PositionInfo, SolvencyEvent, SolvencyInfo, SystemStatus, Trade, Twap } from "./types";
 
 const base = { address: EXCHANGE, abi: exchangeAbi } as const;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -181,13 +181,18 @@ export const chainSource: DataSource = {
       read<bigint>("insurance"), read<bigint>("unresolvedBadDebt"), Promise.all(MARKETS.map(({ id }) => read<bigint>("adlDebt", [id]))),
       events("AdlExecuted"), events("Recapitalized"), events("BadDebtUnresolved"), events("Liquidated"),
     ]);
-    const [bs, sk] = await Promise.all([events("BackstopSynced").catch(() => []), events("AdlSkipped").catch(() => [])]);
+    const [bs, sk, el, rl, tk, uw] = await Promise.all([events("BackstopSynced").catch(() => []), events("AdlSkipped").catch(() => []), events("BackstopElevated").catch(() => []),
+      events("BackstopRelaxed").catch(() => []), events("BackstopTaken").catch(() => []), events("BackstopUnwound").catch(() => [])]);
     const rows: Omit<SolvencyEvent, "time">[] = [
       ...a.map((l) => ({ kind: "adl" as const, market: Number(l.args.market), acct: l.args.target as Hex, amount: l.args.debtCleared as bigint, size: l.args.size as bigint, price: l.args.price as bigint, block: l.blockNumber, txHash: l.transactionHash })),
       ...r.map((l) => ({ kind: "recapitalized" as const, market: Number(l.args.market), acct: null, amount: l.args.amount as bigint, size: null, price: null, block: l.blockNumber, txHash: l.transactionHash })),
       ...u.map((l) => ({ kind: "bad_debt_unresolved" as const, market: null, acct: l.args.acct as Hex, amount: l.args.amount as bigint, size: null, price: null, block: l.blockNumber, txHash: l.transactionHash })),
       ...liq.filter((l) => (l.args.badDebt as bigint) > 0n).map((l) => ({ kind: "liquidation_bad_debt" as const, market: Number(l.args.market), acct: l.args.acct as Hex, amount: l.args.badDebt as bigint, size: l.args.size as bigint, price: l.args.price as bigint, block: l.blockNumber, txHash: l.transactionHash })),
       ...bs.map((l) => { const d = (l.args.fromInsurance as bigint) + (l.args.toDebt as bigint); const r = (l.args.refundedInsurance as bigint) + (l.args.repaidDebt as bigint); return d > 0n ? { kind: "backstop_deficit" as const, market: Number(l.args.market), acct: null, amount: d, size: null, price: null, block: l.blockNumber, txHash: l.transactionHash } : { kind: "backstop_repaid" as const, market: null, acct: null, amount: r, size: null, price: null, block: l.blockNumber, txHash: l.transactionHash }; }),
+      ...el.map((l) => ({ kind: "backstop_elevated" as const, market: Number(l.args.market), acct: null, amount: l.args.notional as bigint, size: null, price: null, block: l.blockNumber, txHash: l.transactionHash })),
+      ...rl.map((l) => ({ kind: "backstop_relaxed" as const, market: Number(l.args.market), acct: null, amount: 0n, size: null, price: null, block: l.blockNumber, txHash: l.transactionHash })),
+      ...tk.map((l) => ({ kind: "backstop_taken" as const, market: Number(l.args.market), acct: l.args.acct as Hex, amount: l.args.size as bigint, size: l.args.size as bigint, price: l.args.price as bigint, block: l.blockNumber, txHash: l.transactionHash })),
+      ...uw.map((l) => ({ kind: "backstop_unwound" as const, market: Number(l.args.market), acct: l.args.target as Hex, amount: l.args.size as bigint, size: l.args.size as bigint, price: l.args.price as bigint, block: l.blockNumber, txHash: l.transactionHash })),
       ...sk.map((l) => ({ kind: "adl_skipped" as const, market: Number(l.args.market), acct: l.args.target as Hex, amount: l.args.slack as bigint, size: null, price: null, block: l.blockNumber, txHash: l.transactionHash })),
     ];
     const t = await times(rows.map((x) => x.block));
@@ -199,6 +204,22 @@ export const chainSource: DataSource = {
       read<bigint>("unresolvedBadDebt"), read<bigint>("insurance"), opt<bigint>("bsDebt"), opt<bigint>("backstopEquity"), opt<bigint>("wdGateThreshold"),
     ]);
     return { unresolvedBadDebt: unresolved, bsDebt, insurance, backstopEquity: eq, gateThreshold: thr, gateActive: thr === null ? null : unresolved > thr } satisfies ExchangeHealth;
+  },
+  async getBackstop(market) {
+    const opt = async <T,>(fn: string, args: readonly unknown[] = []): Promise<T | null> => { try { return await read<T>(fn, args); } catch { return null; } };
+    const BACKSTOP = await opt<Hex>("BACKSTOP");
+    const [cfg, au, pos, mark] = await Promise.all([
+      opt<readonly [bigint, number, number, number, number, bigint]>("backstopCfg", [market]),
+      opt<readonly [boolean, boolean, bigint, bigint, bigint]>("backstopAuction", [market]),
+      BACKSTOP ? opt<readonly bigint[]>("positions", [BACKSTOP, market]) : Promise.resolve(null),
+      opt<bigint>("markPrice", [market]),
+    ]);
+    const size = pos ? (pos[0] < 0n ? -pos[0] : pos[0]) : null;
+    return {
+      market, softNotional: cfg ? cfg[0] : null, elevated: cfg ? cfg[5] !== 0n : null,
+      inventoryNotional: size !== null && mark !== null ? (size * mark) / 100_000_000n : null,
+      auction: au ? { active: au[0], takerSells: au[1], price: au[2], discBps: au[3], size: au[4] } : null,
+    } satisfies BackstopStatus;
   },
   async getWithdrawGate(acct) {
     const opt = async <T,>(fn: string, args: readonly unknown[] = []): Promise<T | null> => { try { return await read<T>(fn, args); } catch { return null; } };

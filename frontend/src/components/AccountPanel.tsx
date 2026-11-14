@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { parseEther, type Hex } from "viem";
 import { useApp } from "@/lib/app";
-import { EXCHANGE, IS_LOCAL, MARKETS, USDC, usdcAbi } from "@/lib/config";
+import { EXCHANGE, IS_LOCAL, IS_TESTNET, MARKETS, NETWORK, USDC, usdcAbi } from "@/lib/config";
+import { DEPOSIT_TEXT, depositStep } from "@/lib/network";
 import { useAccountState, useAdlScores, useAgents, useChainClock, useEthBalance, usePositions, useSolvency, useSystem, useUsdc, useWithdrawGate } from "@/lib/queries";
 import { effectiveLeverage, healthState } from "@/lib/risk";
 import { useTx } from "@/lib/tx";
@@ -55,7 +56,7 @@ function Funds() {
   const [dep, setDep] = useState(""); const [wd, setWd] = useState(""); const [wdAck, setWdAck] = useState(false);
   if (!w.address) return (
     <div className="panel" id="account"><h3>Your account <span className="tag">Steps 1-2</span></h3>
-      <Empty title="Connect a wallet to begin" body="Then you can get mock USDC, deposit it, and place your first trade. Nothing is real money here." action={<button className="btn brand" onClick={() => document.getElementById("connect-btn")?.click()}>Connect wallet</button>} />
+      <Empty title="Connect a wallet to begin" body={IS_LOCAL ? "Then you can get mock USDC, deposit it, and place your first trade. Nothing is real money here." : "Then you can get test USDC from the faucet, deposit it, and place your first trade. Test funds only."} action={<button className="btn brand" onClick={() => document.getElementById("connect-btn")?.click()}>Connect wallet</button>} />
     </div>
   );
 
@@ -88,11 +89,12 @@ function Funds() {
       </Advanced>
 
       <h4>Wallet</h4>
-      <Row label="Mock USDC in wallet"><Val v={usdc && fmtUsd(usdc.bal)} /> USDC</Row>
+      <Row label={IS_LOCAL ? "Mock USDC in wallet" : "USDC in wallet"}><Val v={usdc && fmtUsd(usdc.bal)} /> USDC</Row>
       <Row label="Gas (native token)"><Val v={eth !== undefined ? formatFixed(eth, 18, 4) : undefined} /></Row>
-      {eth !== undefined && eth === 0n && <p className="callout warn">This wallet has no gas tokens, so it cannot send transactions. {IS_LOCAL ? "Disconnect and connect a Hardhat dev account (they come with gas)." : "Add some native tokens for network fees."}</p>}
+      {eth !== undefined && eth === 0n && <p className="callout warn">This wallet has no gas tokens, so it cannot send transactions. {IS_LOCAL ? "Disconnect and connect a Hardhat dev account (they come with gas)." : IS_TESTNET ? `Get free test ETH for ${NETWORK.shortName} gas from a faucet, such as ${NETWORK.faucets?.eth?.[0]?.replace("https://", "")}.` : "Add some native tokens for network fees."}</p>}
       {IS_LOCAL && <button className="btn sm full" disabled={blocked} onClick={() => send({ label: "Get 10,000 mock USDC (local faucet)", address: USDC, abi: usdcAbi, functionName: "mint", args: [w.address, 10_000_000_000n] })}>Get 10,000 mock USDC (local faucet)</button>}
 
+      {IS_TESTNET && NETWORK.faucets?.usdc && <p className="callout info faucet">Test funds only. <a href={NETWORK.faucets.usdc} target="_blank" rel="noopener noreferrer">Get test USDC from the Circle faucet</a>, and test ETH for gas from <a href={NETWORK.faucets.eth?.[0]} target="_blank" rel="noopener noreferrer">an {NETWORK.shortName} faucet</a>.</p>}
       <h4><Tip k="collateral">Deposit USDC</Tip></h4>
       {empty && <p className="callout info">Your account is empty. Deposit some USDC to start trading.</p>}
       <div className="row"><div className="inp"><input id="deposit-input" aria-label="Deposit amount in USDC" inputMode="decimal" placeholder="0.00" value={dep} onChange={(e) => setDep(e.target.value)} /><em>USDC</em></div>
@@ -104,7 +106,7 @@ function Funds() {
       </div>
       <div className="quick">{[100, 1000].map((x) => <button key={x} type="button" className="btn sm" onClick={() => setDep(String(x))}>{x.toLocaleString("en-US")}</button>)}{usdc && usdc.bal > 0n && <button type="button" className="btn sm" onClick={() => setDep(formatFixed(usdc.bal, 6))}>All</button>}</div>
       {depAmt !== null && usdc && depAmt > usdc.bal && <p className="errs">You only have {fmtUsd(usdc.bal)} USDC in your wallet. {IS_LOCAL ? "Use the faucet above to get more." : "Enter a smaller amount."}</p>}
-      {needApprove && <p className="hint">Two quick steps: first allow the exchange to take exactly this amount, then press Deposit.</p>}
+      {depAmt !== null && usdc !== undefined && <p className="hint" role="status">{DEPOSIT_TEXT[depositStep({ amount: depAmt, bal: usdc.bal, allowance: usdc.allowance })]}</p>}
 
       <h4><Tip k="withdrawable">Withdraw USDC</Tip></h4>
       {!hasPos && acct && acct.collateral > 0n && <p className="hint">You have no open positions, so your free collateral can be withdrawn.</p>}

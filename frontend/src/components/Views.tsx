@@ -1,7 +1,7 @@
 "use client";
 import { useBrand } from "@/brand/context";
 import { useApp } from "@/lib/app";
-import { MARKETS } from "@/lib/config";
+import { DEMO_TAG, MARKETS } from "@/lib/config";
 import { useFunding, useMark, useMarketInfo, useStats24h, useSystem, useAccountState, useLedger, useSolvency } from "@/lib/queries";
 import { allowedActions } from "@/lib/marketRules";
 import { MARKET_STATES } from "@/lib/order";
@@ -21,6 +21,8 @@ const SOLVENCY_LABEL: Record<string, string> = {
   bad_debt_unresolved: "Bad debt recorded (not covered by insurance)", liquidation_bad_debt: "Liquidation left bad debt",
   adl: "Auto-deleveraging", recapitalized: "Recapitalized", backstop_deficit: "Backstop loss recorded (insurance + bad debt)",
   backstop_repaid: "Backstop gains repaid earlier draws", adl_skipped: "ADL skipped an account with no margin slack",
+  backstop_elevated: "Backstop inventory above its cap (discount auction started)", backstop_relaxed: "Backstop inventory back under its cap",
+  backstop_taken: "Backstop inventory taken from the auction", backstop_unwound: "Backstop inventory unwound against winners at mark",
 };
 /** Protocol-wide loss events: liquidations, fills, delist settlement or a permissionless write-off can all record bad debt. */
 function SolvencyEventsPanel() {
@@ -48,7 +50,7 @@ function MarketRow({ id }: { id: number }) {
   const open = () => { app.setMarket(id); app.setView("trade"); };
   return (
     <tr>
-      <td><button className="linkbtn" onClick={open} aria-label={`Open ${m.name}`}><span className="coin" aria-hidden>{m.base.slice(0, 1)}</span> <b>{m.name}</b> <span className="tagpill">Perpetual</span></button></td>
+      <td><button className="linkbtn" onClick={open} aria-label={`Open ${m.name}`}><span className="coin" aria-hidden>{m.base.slice(0, 1)}</span> <b>{m.name}</b> <span className="tagpill">Perpetual</span>{m.demo && <> <span className="tagpill" data-testid="demo-tag">{DEMO_TAG}</span></>}</button></td>
       <td className="r num">{mark ? fmtPrice(mark) : <span title="No fresh oracle price">-</span>}</td>
       <td className={`r num ${s && s.changePct !== null ? (s.changePct >= 0 ? "long" : "short") : "mute"}`}>{s && s.changePct !== null ? <><Tri up={s.changePct >= 0} />{Math.abs(s.changePct).toFixed(2)}%</> : <span title="Needs at least 24h of trade history">-</span>}</td>
       <td className="r num">{fund ? fmtRatePct(fund.rate) : "-"}</td>
