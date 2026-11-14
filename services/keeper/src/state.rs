@@ -54,6 +54,9 @@ pub struct State {
     /// Undo journal for events applied in the recent block window, in application order: `(block, undo)`.
     #[serde(default)]
     pub journal: Vec<(u64, Undo)>,
+    /// Pyth pusher bookkeeping (spend ledger, backoff, schedule). Old checkpoints load with the default.
+    #[serde(default)]
+    pub pyth: crate::features::pyth_push::PythPersist,
 }
 
 /// Decoded, chain-agnostic events the keeper cares about.
@@ -69,7 +72,7 @@ pub enum Event {
 
 impl State {
     pub fn new(exchange: String, start_block: u64) -> State {
-        State { version: STATE_VERSION, exchange, next_block: start_block, accounts: BTreeMap::new(), conds: BTreeMap::new(), twaps: BTreeSet::new(), hashes: BTreeMap::new(), journal: vec![] }
+        State { version: STATE_VERSION, exchange, next_block: start_block, accounts: BTreeMap::new(), conds: BTreeMap::new(), twaps: BTreeSet::new(), hashes: BTreeMap::new(), journal: vec![], pyth: Default::default() }
     }
 
     /// Apply an event that was emitted in `block`, recording how to undo it.

@@ -92,6 +92,13 @@ ADL leg only reduces the backstop pro rata, so the backstop's **size and basis s
 insurance and the withdrawal-gate threshold are contract views (`backstopEquity`, `bsDebt`, `insurance`, `wdGateThreshold`); the indexer does not poll views (no RPC calls beyond logs),
 so clients read those from the chain.
 
+Backstop Phase 2 (inventory management): `BackstopElevated`, `BackstopRelaxed`, `BackstopTaken`, `BackstopUnwound`, `BackstopCfgSet`, `BackstopPlaceOpenSet` and `BackstopTakeFeeSet`
+are served on the same endpoint (kinds `backstop_elevated`, `backstop_relaxed`, `backstop_taken`, `backstop_unwound`, `backstop_cfg_set`, `backstop_place_open_set`, `backstop_take_fee_set`;
+`?kind=` filters). `takeBackstop` and `unwindBackstop` change positions WITHOUT a `Fill` event, so the indexer applies both legs (the taker/target and the BACKSTOP key, plus open interest
+and the taker's fee) from `BackstopTaken` / `BackstopUnwound`; the e2e checks size, basis, realised PnL and OI against the chain after a take and an unwind. `GET /v1/backstop/state`
+summarises the event-derived state per market (last config, elevated flag, take/unwind counts, place-open flag, take fee). Live inventory notional and the auction quote
+(`backstopAuction(market)`) are contract views and are not indexed.
+
 ### Cancel reasons and bad-debt sources
 `cancel_reason` on orders is one of `user, expired, self_trade, invalid_reduce_only, maker_margin, filled, liquidation, replaced, price_band, unknown`.
 `price_band` (contract `CancelReason.PriceBand = 8`) means a resting order was outside index +/- `bandBps` when a taker reached it; it derives to status `canceled`.

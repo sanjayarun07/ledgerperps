@@ -1,7 +1,7 @@
 //! Orchestrator: one poll cycle = scan logs -> funding -> liquidation -> conditionals -> TWAP -> ADL -> write-off -> checkpoint.
 use crate::{
     actions::{Ctx, Marks},
-    features::{adl, conditional, funding, liquidation, sync_backstop, twap, writeoff},
+    features::{adl, backstop_inventory, conditional, funding, liquidation, pyth_push, sync_backstop, twap, writeoff},
     metrics::Health,
     scanner,
     state::State,
@@ -21,6 +21,9 @@ pub struct Keeper {
     /// Per-market time of the last funding poke (each market has its own `fundingInterval`).
     last_funding: HashMap<u8, Instant>,
     sync: sync_backstop::SyncState,
+    inv: backstop_inventory::InvState,
+    /// Present only when `enable_pyth_push` is on; the keeper runs unchanged without it.
+    hermes: Option<pyth_push::HermesClient>,
 }
 
 impl Keeper {
@@ -37,7 +40,22 @@ impl Keeper {
                 State::new(exch, ctx.cfg.start_block)
             }
         };
-        Ok(Keeper { ctx, state, health, shutdown, backstop, last_funding: HashMap::new(), sync: Default::default() })
+        let hermes = if ctx.cfg.enable_pyth_push {
+            let c = pyth_push::HermesClient::new(&ctx.cfg.pyth)?;
+            ctx.metrics.pyth_enabled.set(1);
+            info!(
+                hermes = c.endpoint(), pyth = %ctx.cfg.pyth.contract, feeds = ctx.cfg.pyth.feeds.len(), auth_header = c.has_auth(),
+                push_when_age_secs = ctx.cfg.pyth.push_when_age_secs, interval_secs = ctx.cfg.pyth.push_interval_secs, dry_run = ctx.cfg.dry_run,
+                "pyth pusher enabled"
+            );
+            if !c.has_auth() {
+                warn!(env = %ctx.cfg.pyth.api_key_env, "pyth pusher: no Hermes API key in the environment; public Hermes endpoints may answer 401 (see README: Hermes access)");
+            }
+            Some(c)
+        } else {
+            None
+        };
+        Ok(Keeper { ctx, state, health, shutdown, backstop, last_funding: HashMap::new(), sync: Default::default(), inv: Default::default(), hermes })
     }
 
     pub async fn run(&mut self) {
@@ -99,6 +117,13 @@ impl Keeper {
         let mut marks = Marks::default();
         let cfg = self.ctx.cfg.clone();
 
+        // 1b) keep the Pyth side of the oracle fresh BEFORE anything reads prices
+        if let (true, Some(h)) = (cfg.enable_pyth_push && !self.stopping(), self.hermes.as_ref()) {
+            if pyth_push::run(&self.ctx, &mut self.state.pyth, h, head.timestamp).await.is_sent() {
+                self.persist(); // the spend ledger must survive a crash right after a send
+            }
+        }
+
         // 2) funding
         if cfg.enable_funding && !self.stopping() {
             funding::run(&self.ctx, n, &mut self.last_funding).await;
@@ -119,6 +144,10 @@ impl Keeper {
         // 5b) record the backstop's mark-to-market deficit before ADL needs the debt on the books
         if cfg.enable_sync_backstop && !self.stopping() {
             sync_backstop::run(&self.ctx, &mut self.sync, n, self.backstop).await;
+        }
+        // 5c) backstop phase 2: start/stop the elevation clock, unwind after maxAge (both off per market until the admin sets backstopCfg)
+        if (cfg.enable_poke_backstop || cfg.enable_unwind_backstop) && !self.stopping() {
+            backstop_inventory::run(&self.ctx, &mut self.inv, &self.state, n, self.backstop, head.timestamp).await;
         }
         // 6) ADL
         if cfg.enable_adl && !self.stopping() {

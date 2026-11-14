@@ -136,6 +136,29 @@ async function main() {
   await place(alice, { isBuy: true, price: px(48000), size: btc(1) });                // partially filled below
   await place(dave, { isBuy: false, price: px(48000), size: btc(0.4), tif: IOC });    // fills 0.4 of alice's bid
 
+  // ---- backstop PHASE 2 (inventory management) on SOL: the backstop is still long after the ADL above. Enable the market, elevate it,
+  //   let alice TAKE 1 SOL from the Dutch auction, then (after maxAge) unwind grace (profitable short) against the backstop at mark.
+  //   Neither takeBackstop nor unwindBackstop emits a Fill: the indexer must move both legs from BackstopTaken / BackstopUnwound.
+  await ex.setBackstopCfg(2, 1_000_000, 300, 0, 60, 60);
+  await ex.setBackstopTakeFee(5);
+  await ex.setBackstopPlaceOpen(false);
+  await ex.setBackstopPlaceOpen(true);
+  await oracle.set(SOLFEED, usd(80));
+  await ex.pokeBackstop(2);                                                   // BackstopElevated
+  const aliceAddr = alice.address;
+  const takeRc = await (await ex.connect(alice).takeBackstop(aliceAddr, 0, 2, btc(1), px(1000))).wait();
+  const takeEv = takeRc.logs.map((l) => { try { return ex.interface.parseLog(l); } catch { return null; } }).find((l) => l && l.name === "BackstopTaken");
+  if (!takeEv) throw new Error("scenario bug: no BackstopTaken");
+  await ethers.provider.send("evm_increaseTime", [61]); await ethers.provider.send("evm_mine", []);
+  await oracle.set(SOLFEED, usd(80));                                         // refresh the feed after the time jump
+  const graceKey = await key(grace);
+  const unwRc = await (await ex.connect(keeper).unwindBackstop([graceKey], 2)).wait();
+  const unwEv = unwRc.logs.map((l) => { try { return ex.interface.parseLog(l); } catch { return null; } }).find((l) => l && l.name === "BackstopUnwound");
+  if (!unwEv) throw new Error("scenario bug: no BackstopUnwound");
+  await oracle.set(SOLFEED, usd(150));
+  adlCtx.phase2 = { takePrice: takeEv.args.price.toString(), takeSize: takeEv.args.size.toString(), takeFee: takeEv.args.fee.toString(), takeDisc: takeEv.args.discBps.toString(), takerSold: takeEv.args.takerSold,
+    unwSize: unwEv.args.size.toString(), unwPrice: unwEv.args.price.toString(), alice: aliceAddr };
+
   await dumpExpected(ex, dep, { alice, bob, carol, dave, keeper, erin, frank, grace }, adlCtx);
 }
 
@@ -183,6 +206,9 @@ async function dumpExpected(ex, dep, signers, adlCtx) {
     FundingUpdated: await count(ex.filters.FundingUpdated()), FundingSettled: await count(ex.filters.FundingSettled()),
     OrderAccepted: await count(ex.filters.OrderAccepted()), TwapSlice: await count(ex.filters.TwapSlice()), CondTriggered: await count(ex.filters.CondTriggered()),
     Fill: fills.length,
+    BackstopCfgSet: await count(ex.filters.BackstopCfgSet()), BackstopElevated: await count(ex.filters.BackstopElevated()), BackstopTaken: await count(ex.filters.BackstopTaken()),
+    BackstopUnwound: await count(ex.filters.BackstopUnwound()), BackstopRelaxed: await count(ex.filters.BackstopRelaxed()),
+    BackstopPlaceOpenSet: await count(ex.filters.BackstopPlaceOpenSet()), BackstopTakeFeeSet: await count(ex.filters.BackstopTakeFeeSet()),
     BadDebtUnresolved: await count(ex.filters.BadDebtUnresolved()), AdlExecuted: await count(ex.filters.AdlExecuted()), Recapitalized: await count(ex.filters.Recapitalized()),
   };
   // ---- bad debt / ADL / recapitalisation ground truth: ethers-decoded events + contract views

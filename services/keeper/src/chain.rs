@@ -333,6 +333,9 @@ impl Chain {
     pub async fn adl_health(&self, a: B256, m: u8) -> Result<IPerp::adlHealthReturn, CallErr> {
         self.ex().adlHealth(a, m).call().await.map_err(from_contract)
     }
+    pub async fn backstop_cfg(&self, m: u8) -> Result<IPerp::backstopCfgReturn, CallErr> {
+        self.ex().backstopCfg(m).call().await.map_err(from_contract)
+    }
     pub async fn backstop_equity(&self) -> Result<I256, CallErr> {
         self.ex().backstopEquity().call().await.map_err(from_contract)
     }
@@ -406,7 +409,40 @@ impl Chain {
 
     // ------------------------------------------------------------------ simulation + sending
     fn request(&self, data: Bytes) -> TransactionRequest {
-        TransactionRequest::default().with_from(self.from).with_to(self.exchange).with_input(data)
+        self.request_at(self.exchange, U256::ZERO, data)
+    }
+
+    fn request_at(&self, to: Address, value: U256, data: Bytes) -> TransactionRequest {
+        let r = TransactionRequest::default().with_from(self.from).with_to(to).with_input(data);
+        if value.is_zero() { r } else { r.with_value(value) }
+    }
+
+    /// Current max-fee-per-gas bid (wei) without any estimate.
+    pub async fn gas_price_wei(&self) -> Result<u128, CallErr> {
+        self.fee_params().await.map(|(f, _)| f).map_err(|e| CallErr::Transport(e.to_string()))
+    }
+
+    /// True when a signing key is loaded (dry-run without a key has none; its `from` is a placeholder with no balance).
+    pub fn has_signer(&self) -> bool { self.wallet.is_some() }
+
+    /// Plain `eth_call` view against an arbitrary contract (latest block, no `from`).
+    pub async fn view_at(&self, to: Address, data: Bytes) -> Result<Bytes, CallErr> {
+        self.caller.raw_call(to, data).await
+    }
+
+    /// eth_call as the keeper against an arbitrary contract with a `value` (used for payable calls such as Pyth `updatePriceFeeds`).
+    pub async fn simulate_at(&self, to: Address, value: U256, data: &Bytes) -> Result<(), CallErr> {
+        self.provider.call(self.request_at(to, value, data.clone())).await.map(|_| ()).map_err(|e| from_transport(&e))
+    }
+
+    /// `(gas estimate, gas limit that would be used, first-attempt max fee per gas, worst-case fee per gas after all bumps)` in wei.
+    /// The worst case honours `max_fee_gwei`; if even the first bid exceeds the cap this is an error (the send would refuse too).
+    pub async fn quote_at(&self, to: Address, value: U256, data: &Bytes) -> Result<(u64, u64, u128, u128), CallErr> {
+        let gas = self.provider.estimate_gas(self.request_at(to, value, data.clone())).await.map_err(|e| from_transport(&e))?;
+        let (max_fee, _) = self.fee_params().await.map_err(|e| CallErr::Transport(e.to_string()))?;
+        let worst = fee_for_attempt(max_fee, self.bump_pct, self.max_attempts.saturating_sub(1), self.max_fee_wei)
+            .ok_or_else(|| CallErr::Transport(format!("fee {max_fee} wei is above the max_fee_gwei cap")))?;
+        Ok((gas, gas_with_buffer(gas, self.buffer_pct), max_fee, worst))
     }
 
     /// eth_call the exact calldata as the keeper. Ok(()) means it would succeed on the current state.
@@ -447,11 +483,16 @@ impl Chain {
     /// Simulate + estimate + sign + send + wait, replacing the transaction with higher fees if it is not mined in time.
     /// Transactions are serialised (one nonce lane) by holding the nonce lock for the whole lifecycle.
     pub async fn execute(&self, label: &str, data: Bytes) -> Result<Sent, SendError> {
+        self.execute_at(label, self.exchange, U256::ZERO, data).await
+    }
+
+    /// Same as `execute` for an arbitrary target contract and `value` (the Pyth pusher).
+    pub async fn execute_at(&self, label: &str, to: Address, value: U256, data: Bytes) -> Result<Sent, SendError> {
         if !self.can_send {
             return Err(SendError::NoSigner);
         }
         // 1) gas estimate doubles as a final simulation against pending state
-        let gas = match self.provider.estimate_gas(self.request(data.clone())).await {
+        let gas = match self.provider.estimate_gas(self.request_at(to, value, data.clone())).await {
             Ok(g) => g,
             Err(e) => {
                 return Err(match from_transport(&e) {
@@ -480,7 +521,7 @@ impl Chain {
                 };
                 let tip = bump_to(base_tip, self.bump_pct, attempt).min(max_fee);
                 let req = self
-                    .request(data.clone())
+                    .request_at(to, value, data.clone())
                     .with_nonce(nonce)
                     .with_gas_limit(gas_limit)
                     .with_chain_id(self.chain_id)

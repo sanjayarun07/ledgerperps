@@ -364,7 +364,8 @@ pub struct BadDebtRow {
 /// Backstop / ADL-safety / withdrawal-gate events (served at `/v1/backstop/events`). Amounts are decimal strings (micro-USDC, 1e6) or null.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BackstopRow {
-    /// backstop_synced | adl_skipped | adl_hard_prem_set | withdraw_gate_set
+    /// backstop_synced | adl_skipped | adl_hard_prem_set | withdraw_gate_set | backstop_elevated | backstop_relaxed | backstop_taken |
+    /// backstop_unwound | backstop_cfg_set | backstop_place_open_set | backstop_take_fee_set
     #[serde(deserialize_with = "d_static")]
     pub kind: Lbl,
     pub market: Option<u8>,
@@ -377,6 +378,38 @@ pub struct BackstopRow {
     pub slack: Option<String>,
     pub bps: Option<u32>,
     pub threshold: Option<String>,
+    /// backstop_elevated: inventory notional (micro-USDC)
+    #[serde(default)]
+    pub notional: Option<String>,
+    /// backstop_taken: taker address / account key, side, size (1e8), price (1e6), discount (bps), fee (micro-USDC)
+    #[serde(default)]
+    pub taker: Option<Address>,
+    #[serde(default)]
+    pub acct: Option<B256>,
+    #[serde(default)]
+    pub taker_sold: Option<bool>,
+    #[serde(default)]
+    pub size: Option<String>,
+    #[serde(default)]
+    pub price: Option<u64>,
+    #[serde(default)]
+    pub disc_bps: Option<String>,
+    #[serde(default)]
+    pub fee: Option<String>,
+    /// backstop_cfg_set
+    #[serde(default)]
+    pub soft_notional: Option<String>,
+    #[serde(default)]
+    pub max_disc_bps: Option<u16>,
+    #[serde(default)]
+    pub dwell: Option<u32>,
+    #[serde(default)]
+    pub ramp: Option<u32>,
+    #[serde(default)]
+    pub max_age: Option<u32>,
+    /// backstop_place_open_set
+    #[serde(default)]
+    pub open: Option<bool>,
     pub block: u64,
     pub log_index: u32,
     pub ts: u64,
@@ -1518,6 +1551,72 @@ impl State {
                 r.threshold = Some(threshold.to_string());
                 self.backstop.push(r);
             }
+            Ev::BackstopElevated { market, notional } => {
+                let mut r = self.backstop_row("backstop_elevated", block, log_index, ts, tx_hash, key);
+                r.market = Some(*market);
+                r.notional = Some(notional.to_string());
+                self.backstop.push(r);
+            }
+            Ev::BackstopRelaxed { market } => {
+                let mut r = self.backstop_row("backstop_relaxed", block, log_index, ts, tx_hash, key);
+                r.market = Some(*market);
+                self.backstop.push(r);
+            }
+            Ev::BackstopTaken { market, taker, acct, taker_sold, size, price, disc_bps, fee } => {
+                // no Fill event: apply both legs to the position model (taker sold => taker short, backstop long)
+                self.ensure_market(*market);
+                let q = if *taker_sold { -(*size as i128) } else { *size as i128 };
+                self.pos_fill(*acct, *market, q, *price, block);
+                self.pos_fill(backstop_key(), *market, -q, *price, block);
+                self.add_fee(*acct, *market, *fee as i128, block);
+                let mut r = self.backstop_row("backstop_taken", block, log_index, ts, tx_hash, key);
+                r.market = Some(*market);
+                r.taker = Some(*taker);
+                r.acct = Some(*acct);
+                r.taker_sold = Some(*taker_sold);
+                r.size = Some(size.to_string());
+                r.price = Some(*price);
+                r.disc_bps = Some(disc_bps.to_string());
+                r.fee = Some(fee.to_string());
+                self.backstop.push(r);
+            }
+            Ev::BackstopUnwound { market, target, size, price } => {
+                self.ensure_market(*market);
+                let pos = self.positions.get(&(*target, *market)).map(|p| p.size).unwrap_or(0);
+                if pos != 0 {
+                    let q = if pos > 0 { -(*size as i128) } else { *size as i128 };
+                    self.pos_fill(*target, *market, q, *price, block);
+                    self.pos_fill(backstop_key(), *market, -q, *price, block);
+                } else {
+                    self.counters.unknown_refs += 1;
+                }
+                let mut r = self.backstop_row("backstop_unwound", block, log_index, ts, tx_hash, key);
+                r.market = Some(*market);
+                r.target = Some(*target);
+                r.size = Some(size.to_string());
+                r.price = Some(*price);
+                self.backstop.push(r);
+            }
+            Ev::BackstopCfgSet { market, soft_notional, max_disc_bps, dwell, ramp, max_age } => {
+                let mut r = self.backstop_row("backstop_cfg_set", block, log_index, ts, tx_hash, key);
+                r.market = Some(*market);
+                r.soft_notional = Some(soft_notional.to_string());
+                r.max_disc_bps = Some(*max_disc_bps);
+                r.dwell = Some(*dwell);
+                r.ramp = Some(*ramp);
+                r.max_age = Some(*max_age);
+                self.backstop.push(r);
+            }
+            Ev::BackstopPlaceOpenSet { open } => {
+                let mut r = self.backstop_row("backstop_place_open_set", block, log_index, ts, tx_hash, key);
+                r.open = Some(*open);
+                self.backstop.push(r);
+            }
+            Ev::BackstopTakeFeeSet { bps } => {
+                let mut r = self.backstop_row("backstop_take_fee_set", block, log_index, ts, tx_hash, key);
+                r.bps = Some(*bps);
+                self.backstop.push(r);
+            }
             Ev::AgentApproved { .. } | Ev::IsolatedMode { .. } => {}
         }
         out
@@ -1536,6 +1635,20 @@ impl State {
             slack: None,
             bps: None,
             threshold: None,
+            notional: None,
+            taker: None,
+            acct: None,
+            taker_sold: None,
+            size: None,
+            price: None,
+            disc_bps: None,
+            fee: None,
+            soft_notional: None,
+            max_disc_bps: None,
+            dwell: None,
+            ramp: None,
+            max_age: None,
+            open: None,
             block,
             log_index,
             ts,

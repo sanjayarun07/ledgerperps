@@ -24,8 +24,36 @@ enable_adl = true
 enable_sync_backstop = true       # syncBackstop: record the backstop's mark-to-market deficit (BACKSTOP-1); no on-chain reward
 sync_backstop_max_gas_usd = 0.50   # gas budget (USD) since it pays nothing
 sync_backstop_interval_secs = 60   # periodic check; also checked on every mark change while the backstop holds inventory
+enable_poke_backstop = true        # pokeBackstop (phase 2): start/stop the elevation clock when inventory crosses softNotional; no on-chain reward
+poke_backstop_max_gas_usd = 0.50
+enable_unwind_backstop = true      # unwindBackstop (phase 2): after maxAge elevated, close ranked profitable accounts at mark; no reward
+unwind_backstop_max_gas_usd = 1.00
+backstop_inventory_interval_secs = 15   # min seconds between inventory checks (3 reads per market); a market with softNotional == 0 is skipped
 enable_writeoff = true      # permissionless writeOff sweep of flat negative accounts (no on-chain reward)
 writeoff_max_gas_usd = 0.50 # send only if estimated gas cost <= this (writeOff pays nothing); --force-unprofitable overrides
+# ---- Pyth price pusher (OFF by default). Pyth is a pull oracle: without a pusher its on-chain price goes stale and every read reverts OracleDegraded.
+# Uncomment the block to enable it; the keeper signs with the same wallet as everything else (KEEPER_PRIVATE_KEY / keystore), which must hold a little ETH.
+# --- pyth-begin (tests/config parsing uncomments exactly this block)
+# enable_pyth_push = true
+# pyth_contract = "0x4374e5a8b9C22271E9EB878A2AA31DE97DF15DAF"   # Pyth Core on Arbitrum Sepolia (infra/testnet/testnet.config.json)
+# pyth_feed_ids = [                                                # one per market; optional LABEL= prefix is used in metrics/logs
+#   "BTC=0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+#   "ETH=0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+#   "SOL=0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+# ]
+# hermes_url = "https://pyth.dourolabs.app/hermes"   # default. The public https://hermes.pyth.network answers 401 without a key. A URL that embeds a key is never logged in full (only scheme://host)
+# hermes_api_key_env = "KEEPER_HERMES_API_KEY"    # NAME of the env var holding the key VALUE (never put the key in this file); if empty, HERMES_API_KEY is tried; none = no auth header
+# hermes_api_key_header = "Authorization"         # header carrying it
+# hermes_api_key_prefix = "Bearer "               # header value = prefix + key. For x-api-key style providers: header "x-api-key", prefix ""
+# hermes_timeout_secs = 10
+# pyth_push_interval_secs = 20       # how often on-chain ages are checked (+/- pyth_jitter_pct); Hermes is contacted only when a push is due
+# pyth_max_age_secs = 3600           # the exchange's oracle max age (MedianOracle.maxAge); reads revert beyond it
+# pyth_push_when_age_secs = 1800     # push when any feed is this old; default pyth_max_age_secs / 2
+# pyth_max_fee_wei = 100000000000000 # hard cap on the Pyth update fee per push (0.0001 ETH); not overridden by force_unprofitable
+# pyth_max_gas_usd = 0.50            # send only if estimated gas cost <= this (a push pays nothing); force_unprofitable overrides THIS gate only
+# pyth_hourly_budget_wei = 5000000000000000   # rolling 1 h ceiling for fee + worst-case gas (0.005 ETH); nothing overrides it
+# pyth_jitter_pct = 10
+# --- pyth-end
 dry_run = false
 metrics_addr = "127.0.0.1:9100"
 tx_timeout_secs = 30

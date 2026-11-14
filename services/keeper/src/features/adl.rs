@@ -29,7 +29,6 @@ pub fn has_slack(eq: I256, mm: U256) -> bool {
     }
 }
 
-/// An ADL target must have slack above its maintenance requirement (`adlHealth`: equity > mm); the contract skips others with an
 pub fn rank_candidates(mut c: Vec<(B256, U256)>, max: usize) -> Vec<B256> {
     c.retain(|(_, s)| !s.is_zero());
     c.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));

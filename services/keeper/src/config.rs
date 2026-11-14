@@ -104,9 +104,67 @@ pub struct RawConfig {
     /// Periodic `syncBackstop` check interval (it is also checked whenever a mark changes while the backstop holds inventory).
     #[arg(long, env = "KEEPER_SYNC_BACKSTOP_INTERVAL_SECS")]
     pub sync_backstop_interval_secs: Option<u64>,
+    /// Backstop Phase 2: `pokeBackstop(market)` starts/stops the elevation clock when the backstop's inventory notional crosses `softNotional`.
+    #[arg(long, env = "KEEPER_ENABLE_POKE_BACKSTOP", num_args = 0..=1, default_missing_value = "true")]
+    pub enable_poke_backstop: Option<bool>,
+    #[arg(long, env = "KEEPER_POKE_BACKSTOP_MAX_GAS_USD")]
+    pub poke_backstop_max_gas_usd: Option<f64>,
+    /// Backstop Phase 2: `unwindBackstop` closes ranked profitable opposite-side accounts at mark once a market has been elevated for `maxAge`.
+    #[arg(long, env = "KEEPER_ENABLE_UNWIND_BACKSTOP", num_args = 0..=1, default_missing_value = "true")]
+    pub enable_unwind_backstop: Option<bool>,
+    #[arg(long, env = "KEEPER_UNWIND_BACKSTOP_MAX_GAS_USD")]
+    pub unwind_backstop_max_gas_usd: Option<f64>,
+    /// Minimum seconds between inventory checks per keeper (they cost 3 reads per market).
+    #[arg(long, env = "KEEPER_BACKSTOP_INVENTORY_INTERVAL_SECS")]
+    pub backstop_inventory_interval_secs: Option<u64>,
     /// `writeOff` pays the keeper nothing on-chain; it is sent only if the estimated gas cost is <= this many USD (or --force-unprofitable).
     #[arg(long, env = "KEEPER_WRITEOFF_MAX_GAS_USD")]
     pub writeoff_max_gas_usd: Option<f64>,
+    /// Push signed Pyth price updates (from Hermes) to the Pyth contract when the on-chain price gets old. Default off.
+    #[arg(long, env = "KEEPER_ENABLE_PYTH_PUSH", num_args = 0..=1, default_missing_value = "true")]
+    pub enable_pyth_push: Option<bool>,
+    /// Pyth contract address on this chain (required with --enable-pyth-push).
+    #[arg(long, env = "KEEPER_PYTH_CONTRACT")]
+    pub pyth_contract: Option<String>,
+    /// Pyth price feed ids to keep fresh (comma separated 32-byte hex; optional label as `BTC=0x..`). One per market.
+    #[arg(long, env = "KEEPER_PYTH_FEED_IDS", value_delimiter = ',')]
+    pub pyth_feed_ids: Option<Vec<String>>,
+    /// Hermes base URL (default https://pyth.dourolabs.app/hermes). May be a provider URL that embeds its key: it is never logged in full.
+    #[arg(long, env = "KEEPER_HERMES_URL")]
+    pub hermes_url: Option<String>,
+    /// Name of the HTTP header that carries the Hermes API key (default `Authorization`).
+    #[arg(long, env = "KEEPER_HERMES_API_KEY_HEADER")]
+    pub hermes_api_key_header: Option<String>,
+    /// Text put in front of the key in the header value (default `Bearer `; set to an empty string with `x-api-key`).
+    #[arg(long, env = "KEEPER_HERMES_API_KEY_PREFIX")]
+    pub hermes_api_key_prefix: Option<String>,
+    /// Name of the env var holding the Hermes API key VALUE (default KEEPER_HERMES_API_KEY). Unset/empty = no auth header.
+    #[arg(long, env = "KEEPER_HERMES_API_KEY_ENV")]
+    pub hermes_api_key_env: Option<String>,
+    /// Per-request Hermes timeout, seconds.
+    #[arg(long, env = "KEEPER_HERMES_TIMEOUT_SECS")]
+    pub hermes_timeout_secs: Option<u64>,
+    /// How often the on-chain Pyth ages are checked (a push happens only when one is old enough). Default 20.
+    #[arg(long, env = "KEEPER_PYTH_PUSH_INTERVAL_SECS")]
+    pub pyth_push_interval_secs: Option<u64>,
+    /// The exchange's oracle max age in seconds (MedianOracle `maxAge`, default 3600): beyond it reads revert `OracleDegraded`.
+    #[arg(long, env = "KEEPER_PYTH_MAX_AGE_SECS")]
+    pub pyth_max_age_secs: Option<u64>,
+    /// Push when any feed's on-chain publishTime is at least this old. Default: pyth_max_age_secs / 2.
+    #[arg(long, env = "KEEPER_PYTH_PUSH_WHEN_AGE_SECS")]
+    pub pyth_push_when_age_secs: Option<u64>,
+    /// Hard cap on the Pyth update fee (wei) for one push. Never overridden by --force-unprofitable.
+    #[arg(long, env = "KEEPER_PYTH_MAX_FEE_WEI")]
+    pub pyth_max_fee_wei: Option<u64>,
+    /// Send a push only if its estimated gas cost is <= this many USD (pushes pay nothing); --force-unprofitable overrides.
+    #[arg(long, env = "KEEPER_PYTH_MAX_GAS_USD")]
+    pub pyth_max_gas_usd: Option<f64>,
+    /// Rolling one-hour spend ceiling (update fee + worst-case gas, wei). Never overridden by --force-unprofitable.
+    #[arg(long, env = "KEEPER_PYTH_HOURLY_BUDGET_WEI")]
+    pub pyth_hourly_budget_wei: Option<u64>,
+    /// +/- percent random jitter on the check interval and on retry backoff (0..=50).
+    #[arg(long, env = "KEEPER_PYTH_JITTER_PCT")]
+    pub pyth_jitter_pct: Option<u64>,
     /// Simulate (eth_call) everything but never send a transaction. A signing key is then optional.
     #[arg(long, env = "KEEPER_DRY_RUN", num_args = 0..=1, default_missing_value = "true")]
     pub dry_run: Option<bool>,
@@ -151,7 +209,9 @@ impl RawConfig {
         macro_rules! pick { ($($f:ident),*) => { RawConfig { $($f: self.$f.or(lower.$f)),* } } }
         pick!(rpc_url, rpc_urls, rpc_cooldown_secs, rpc_max_lag_blocks, rpc_concurrency, multicall, multicall_address, multicall_chunk,
               reorg_window, native_usd_price, min_profit_usd, force_unprofitable, submit_jitter_ms, send_raw_via, exchange, start_block, state_file, poll_interval_ms, confirmations, log_chunk, funding_interval_secs,
-              enable_funding, enable_liquidation, enable_conditional, enable_twap, enable_adl, enable_writeoff, writeoff_max_gas_usd, enable_sync_backstop, sync_backstop_max_gas_usd, sync_backstop_interval_secs, dry_run, metrics_addr,
+              enable_funding, enable_liquidation, enable_conditional, enable_twap, enable_adl, enable_writeoff, writeoff_max_gas_usd, enable_sync_backstop, sync_backstop_max_gas_usd, sync_backstop_interval_secs, enable_poke_backstop, poke_backstop_max_gas_usd, enable_unwind_backstop, unwind_backstop_max_gas_usd, backstop_inventory_interval_secs, dry_run, metrics_addr,
+              enable_pyth_push, pyth_contract, pyth_feed_ids, hermes_url, hermes_api_key_header, hermes_api_key_prefix, hermes_api_key_env, hermes_timeout_secs,
+              pyth_push_interval_secs, pyth_max_age_secs, pyth_push_when_age_secs, pyth_max_fee_wei, pyth_max_gas_usd, pyth_hourly_budget_wei, pyth_jitter_pct,
               tx_timeout_secs, max_bump_attempts, gas_bump_pct, gas_buffer_pct, max_fee_gwei, max_actions_per_tick,
               private_key_env, keystore_path, keystore_password_env, log_format, max_ready_lag_blocks)
     }
@@ -163,7 +223,135 @@ pub enum LogFormat { Text, Json }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MulticallMode { Auto, On, Off }
 
+/// `scheme://host[:port]` of any URL string (no userinfo, path or query); `<invalid>` if it does not parse.
+pub fn redact_url(u: &str) -> String {
+    match u.trim().parse::<alloy::transports::http::reqwest::Url>() {
+        Ok(p) => format!("{}://{}{}", p.scheme(), p.host_str().unwrap_or("?"), p.port().map(|x| format!(":{x}")).unwrap_or_default()),
+        Err(_) => "<invalid>".into(),
+    }
+}
+
+/// A URL that may embed credentials (userinfo, path token, query key). `Debug`/`Display` show only `scheme://host[:port]`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SecretUrl(String);
+
+impl SecretUrl {
+    pub fn parse(s: &str) -> Result<SecretUrl> {
+        let u = s.trim().parse::<alloy::transports::http::reqwest::Url>().map_err(|e| anyhow!("invalid hermes_url: {e}"))?;
+        if !matches!(u.scheme(), "http" | "https") || u.host_str().is_none() {
+            bail!("hermes_url must be an http(s) URL");
+        }
+        Ok(SecretUrl(s.trim().to_string()))
+    }
+    /// The full URL. Only for building requests; never log it.
+    pub fn expose(&self) -> &str { &self.0 }
+    /// `scheme://host[:port]` only (no userinfo, path or query).
+    pub fn redacted(&self) -> String { redact_url(&self.0) }
+}
+
+impl std::fmt::Debug for SecretUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}/<redacted>", self.redacted()) }
+}
+
+/// Pyth pusher settings (only meaningful with `enable_pyth_push`). Holds env-var NAMES, never the API key value.
 #[derive(Clone, Debug)]
+pub struct PythCfg {
+    pub contract: Address,
+    /// `(label, feed id)`; the label is only for metrics/logs (default: the id's first 4 bytes).
+    pub feeds: Vec<(String, alloy::primitives::B256)>,
+    pub hermes_url: SecretUrl,
+    pub api_key_header: String,
+    /// Prepended to the key to form the header value (default `Bearer `).
+    pub api_key_prefix: String,
+    /// Env var NAME holding the key; `HERMES_API_KEY` is also tried when this one is empty.
+    pub api_key_env: String,
+    pub hermes_timeout_secs: u64,
+    pub push_interval_secs: u64,
+    pub max_age_secs: u64,
+    pub push_when_age_secs: u64,
+    pub max_fee_wei: u64,
+    pub max_gas_usd: f64,
+    pub hourly_budget_wei: u64,
+    pub jitter_pct: u64,
+}
+
+pub const DEFAULT_HERMES_URL: &str = "https://pyth.dourolabs.app/hermes";
+/// Fallback env var for the Hermes key (the name used in contracts/.env).
+pub const FALLBACK_HERMES_KEY_ENV: &str = "HERMES_API_KEY";
+
+impl PythCfg {
+    fn from_raw(r: &RawConfig) -> Result<PythCfg> {
+        let contract = Address::from_str(r.pyth_contract.as_deref().ok_or_else(|| anyhow!("enable_pyth_push needs pyth_contract (--pyth-contract / KEEPER_PYTH_CONTRACT)"))?)
+            .map_err(|e| anyhow!("invalid pyth_contract: {e}"))?;
+        let mut feeds: Vec<(String, alloy::primitives::B256)> = vec![];
+        for raw in r.pyth_feed_ids.clone().unwrap_or_default() {
+            let raw = raw.trim();
+            if raw.is_empty() { continue; }
+            let (label, id) = match raw.split_once('=') { Some((l, i)) => (Some(l.trim().to_string()), i.trim()), None => (None, raw) };
+            let id = alloy::primitives::B256::from_str(id).map_err(|e| anyhow!("invalid pyth feed id `{id}` (need 32-byte hex): {e}"))?;
+            if feeds.iter().any(|(_, f)| *f == id) { bail!("duplicate pyth feed id {id}"); }
+            let label = label.filter(|l| !l.is_empty()).unwrap_or_else(|| format!("{id:#x}")[..10].to_string());
+            if label.chars().any(|c| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == 'x')) {
+                bail!("pyth feed label `{label}` may only contain letters, digits, `_` and `-`");
+            }
+            feeds.push((label, id));
+        }
+        if feeds.is_empty() { bail!("enable_pyth_push needs at least one pyth_feed_ids entry"); }
+        let hermes_url = SecretUrl::parse(r.hermes_url.as_deref().unwrap_or(DEFAULT_HERMES_URL))?;
+        let api_key_header = r.hermes_api_key_header.clone().unwrap_or_else(|| "Authorization".into());
+        api_key_header.parse::<alloy::transports::http::reqwest::header::HeaderName>().map_err(|e| anyhow!("invalid hermes_api_key_header: {e}"))?;
+        let max_age_secs = r.pyth_max_age_secs.unwrap_or(3600);
+        if max_age_secs < 2 { bail!("pyth_max_age_secs must be >= 2"); }
+        let push_when_age_secs = r.pyth_push_when_age_secs.unwrap_or(max_age_secs / 2);
+        if push_when_age_secs == 0 || push_when_age_secs >= max_age_secs {
+            bail!("pyth_push_when_age_secs must be in 1..pyth_max_age_secs ({max_age_secs}), got {push_when_age_secs}");
+        }
+        let max_gas_usd = r.pyth_max_gas_usd.unwrap_or(0.50);
+        if !max_gas_usd.is_finite() || max_gas_usd < 0.0 { bail!("pyth_max_gas_usd must be a finite number >= 0"); }
+        let jitter_pct = r.pyth_jitter_pct.unwrap_or(10);
+        if jitter_pct > 50 { bail!("pyth_jitter_pct must be <= 50"); }
+        let hermes_timeout_secs = r.hermes_timeout_secs.unwrap_or(10);
+        if hermes_timeout_secs == 0 { bail!("hermes_timeout_secs must be > 0"); }
+        Ok(PythCfg {
+            contract,
+            feeds,
+            hermes_url,
+            api_key_header,
+            api_key_prefix: r.hermes_api_key_prefix.clone().unwrap_or_else(|| "Bearer ".into()),
+            api_key_env: r.hermes_api_key_env.clone().unwrap_or_else(|| "KEEPER_HERMES_API_KEY".into()),
+            hermes_timeout_secs,
+            push_interval_secs: r.pyth_push_interval_secs.unwrap_or(20).max(1),
+            max_age_secs,
+            push_when_age_secs,
+            max_fee_wei: r.pyth_max_fee_wei.unwrap_or(100_000_000_000_000),
+            max_gas_usd,
+            hourly_budget_wei: r.pyth_hourly_budget_wei.unwrap_or(5_000_000_000_000_000),
+            jitter_pct,
+        })
+    }
+
+    /// Placeholder used when the feature is disabled (never read).
+    fn disabled() -> PythCfg {
+        PythCfg {
+            contract: Address::ZERO,
+            feeds: vec![],
+            hermes_url: SecretUrl(DEFAULT_HERMES_URL.into()),
+            api_key_header: "Authorization".into(),
+            api_key_prefix: "Bearer ".into(),
+            api_key_env: "KEEPER_HERMES_API_KEY".into(),
+            hermes_timeout_secs: 10,
+            push_interval_secs: 20,
+            max_age_secs: 3600,
+            push_when_age_secs: 1800,
+            max_fee_wei: 0,
+            max_gas_usd: 0.0,
+            hourly_budget_wei: 0,
+            jitter_pct: 10,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Config {
     /// Ordered, de-duplicated endpoints (at least one).
     pub rpc_urls: Vec<String>,
@@ -194,6 +382,13 @@ pub struct Config {
     pub enable_adl: bool,
     pub enable_writeoff: bool,
     pub enable_sync_backstop: bool,
+    pub enable_poke_backstop: bool,
+    pub enable_unwind_backstop: bool,
+    pub poke_backstop_max_gas_usd: f64,
+    pub unwind_backstop_max_gas_usd: f64,
+    pub backstop_inventory_interval_secs: u64,
+    pub enable_pyth_push: bool,
+    pub pyth: PythCfg,
     pub sync_backstop_max_gas_usd: f64,
     pub sync_backstop_interval_secs: u64,
     pub writeoff_max_gas_usd: f64,
@@ -212,6 +407,67 @@ pub struct Config {
     pub max_ready_lag_blocks: u64,
 }
 
+impl std::fmt::Debug for Config {
+    /// Endpoint URLs may embed API keys: they are printed as `scheme://host[:port]` only.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rpc_urls: Vec<String> = self.rpc_urls.iter().map(|u| redact_url(u)).collect();
+        let send_raw_via = self.send_raw_via.as_deref().map(redact_url);
+        f.debug_struct("Config")
+            .field("rpc_urls", &rpc_urls)
+            .field("rpc_cooldown_secs", &self.rpc_cooldown_secs)
+            .field("rpc_max_lag_blocks", &self.rpc_max_lag_blocks)
+            .field("rpc_concurrency", &self.rpc_concurrency)
+            .field("multicall", &self.multicall)
+            .field("multicall_address", &self.multicall_address)
+            .field("multicall_chunk", &self.multicall_chunk)
+            .field("reorg_window", &self.reorg_window)
+            .field("native_usd_price", &self.native_usd_price)
+            .field("min_profit_usd", &self.min_profit_usd)
+            .field("force_unprofitable", &self.force_unprofitable)
+            .field("submit_jitter_ms", &self.submit_jitter_ms)
+            .field("send_raw_via", &send_raw_via)
+            .field("exchange", &self.exchange)
+            .field("start_block", &self.start_block)
+            .field("state_file", &self.state_file)
+            .field("poll_interval_ms", &self.poll_interval_ms)
+            .field("confirmations", &self.confirmations)
+            .field("log_chunk", &self.log_chunk)
+            .field("funding_interval_secs", &self.funding_interval_secs)
+            .field("enable_funding", &self.enable_funding)
+            .field("enable_liquidation", &self.enable_liquidation)
+            .field("enable_conditional", &self.enable_conditional)
+            .field("enable_twap", &self.enable_twap)
+            .field("enable_adl", &self.enable_adl)
+            .field("enable_writeoff", &self.enable_writeoff)
+            .field("enable_sync_backstop", &self.enable_sync_backstop)
+            .field("enable_poke_backstop", &self.enable_poke_backstop)
+            .field("enable_unwind_backstop", &self.enable_unwind_backstop)
+            .field("poke_backstop_max_gas_usd", &self.poke_backstop_max_gas_usd)
+            .field("unwind_backstop_max_gas_usd", &self.unwind_backstop_max_gas_usd)
+            .field("backstop_inventory_interval_secs", &self.backstop_inventory_interval_secs)
+            .field("enable_pyth_push", &self.enable_pyth_push)
+            .field("pyth", &self.pyth)
+            .field("sync_backstop_max_gas_usd", &self.sync_backstop_max_gas_usd)
+            .field("sync_backstop_interval_secs", &self.sync_backstop_interval_secs)
+            .field("writeoff_max_gas_usd", &self.writeoff_max_gas_usd)
+            .field("dry_run", &self.dry_run)
+            .field("metrics_addr", &self.metrics_addr)
+            .field("tx_timeout_secs", &self.tx_timeout_secs)
+            .field("max_bump_attempts", &self.max_bump_attempts)
+            .field("gas_bump_pct", &self.gas_bump_pct)
+            .field("gas_buffer_pct", &self.gas_buffer_pct)
+            .field("max_fee_gwei", &self.max_fee_gwei)
+            .field("max_actions_per_tick", &self.max_actions_per_tick)
+            .field("private_key_env", &self.private_key_env)
+            .field("keystore_path", &self.keystore_path)
+            .field("keystore_password_env", &self.keystore_password_env)
+            .field("log_format", &self.log_format)
+            .field("max_ready_lag_blocks", &self.max_ready_lag_blocks)
+            .finish()
+    }
+}
+
+
 impl Config {
     pub fn load(cli: Cli) -> Result<Config> {
         let file = match &cli.config {
@@ -225,6 +481,8 @@ impl Config {
     }
 
     pub fn from_raw(r: RawConfig) -> Result<Config> {
+        let enable_pyth_push = r.enable_pyth_push.unwrap_or(false);
+        let pyth = if enable_pyth_push { PythCfg::from_raw(&r)? } else { PythCfg::disabled() };
         let mut rpc_urls: Vec<String> = vec![];
         for u in r.rpc_url.into_iter().chain(r.rpc_urls.unwrap_or_default()) {
             let u = u.trim().to_string();
@@ -300,6 +558,13 @@ impl Config {
             enable_adl: r.enable_adl.unwrap_or(true),
             enable_writeoff: r.enable_writeoff.unwrap_or(true),
             enable_sync_backstop: r.enable_sync_backstop.unwrap_or(true),
+            enable_poke_backstop: r.enable_poke_backstop.unwrap_or(true),
+            enable_unwind_backstop: r.enable_unwind_backstop.unwrap_or(true),
+            poke_backstop_max_gas_usd: r.poke_backstop_max_gas_usd.unwrap_or(0.50),
+            unwind_backstop_max_gas_usd: r.unwind_backstop_max_gas_usd.unwrap_or(1.00),
+            backstop_inventory_interval_secs: r.backstop_inventory_interval_secs.unwrap_or(15).max(1),
+            enable_pyth_push,
+            pyth,
             sync_backstop_max_gas_usd: r.sync_backstop_max_gas_usd.unwrap_or(0.50),
             sync_backstop_interval_secs: r.sync_backstop_interval_secs.unwrap_or(60).max(1),
             writeoff_max_gas_usd: r.writeoff_max_gas_usd.unwrap_or(0.50),
@@ -383,6 +648,20 @@ mod tests {
     }
 
     #[test]
+    fn debug_redacts_endpoint_urls_that_may_embed_keys() {
+        let mut r = base();
+        r.rpc_urls = Some(vec!["https://user:pw@rpc.example.com:8545/v2/SECRETKEY1?k=SECRETKEY2".into()]);
+        r.send_raw_via = Some("https://relay.example/SECRETKEY3".into());
+        let c = Config::from_raw(r).unwrap();
+        let d = format!("{c:?}");
+        assert!(!d.contains("SECRET") && !d.contains("pw@"), "{d}");
+        assert!(d.contains("https://rpc.example.com:8545") && d.contains("https://relay.example"), "{d}");
+        assert!(d.contains("poll_interval_ms"), "other fields still printed");
+        // the real values are untouched
+        assert!(c.rpc_urls.iter().any(|u| u.contains("SECRETKEY1")));
+    }
+
+    #[test]
     fn rpc_urls_merge_dedupe_and_order() {
         let mut r = base();
         r.rpc_urls = Some(vec!["http://b".into(), "http://127.0.0.1:8545".into(), " http://c ".into()]);
@@ -456,6 +735,26 @@ mod tests {
         std::fs::write(&p, "rpc_url = 5\nbogus_key = true\n").unwrap();
         let bad = Cli::try_parse_from(["perp-keeper", "--config", p.to_str().unwrap()]).unwrap();
         assert!(Config::load(bad).unwrap_err().to_string().contains("parsing config"));
+    }
+
+    #[test]
+    fn example_toml_parses_with_and_without_the_pyth_block() {
+        let txt = include_str!("../config.example.toml");
+        let c = Config::from_raw(toml::from_str::<RawConfig>(txt).expect("example parses")).unwrap();
+        assert!(!c.enable_pyth_push, "pusher is off in the shipped example");
+        let mut on = String::new();
+        let mut inside = false;
+        for l in txt.lines() {
+            if l.contains("# --- pyth-begin") { inside = true; continue; }
+            if l.contains("# --- pyth-end") { inside = false; continue; }
+            on.push_str(&if inside { l.strip_prefix("# ").unwrap_or(l).to_string() } else { l.to_string() });
+            on.push('\n');
+        }
+        let c = Config::from_raw(toml::from_str::<RawConfig>(&on).expect("uncommented example parses")).unwrap();
+        assert!(c.enable_pyth_push);
+        assert_eq!(c.pyth.feeds.len(), 3);
+        assert_eq!(c.pyth.feeds[0].0, "BTC");
+        assert_eq!((c.pyth.push_interval_secs, c.pyth.push_when_age_secs, c.pyth.max_fee_wei, c.pyth.hourly_budget_wei), (20, 1800, 100_000_000_000_000, 5_000_000_000_000_000));
     }
 
     #[test]

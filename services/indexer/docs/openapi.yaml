@@ -559,6 +559,10 @@ paths:
         equity repaid earlier draws. `adl_skipped`: ADL passed over `target` because it had no slack above maintenance (`slack`).
         `adl_hard_prem_set` (`bps`) and `withdraw_gate_set` (`threshold`, micro-USDC; 2^128-1 or more means the gate is disabled).
         Amounts are decimal strings. `BadDebtUnresolved` caused by a backstop sync carries the BACKSTOP account key in `/v1/bad-debt`.
+        Phase 2 kinds: `backstop_elevated` (`notional`: inventory crossed the soft cap, the Dutch auction clock starts), `backstop_relaxed`,
+        `backstop_taken` (`taker`, `acct`, `taker_sold`, `size`, `price`, `disc_bps`, `fee`; there is NO Fill event, the indexer moves the taker and the
+        BACKSTOP positions from this row), `backstop_unwound` (`target`, `size`, `price`; same: no Fill), `backstop_cfg_set` (`soft_notional`, `max_disc_bps`,
+        `dwell`, `ramp`, `max_age`; `soft_notional` 0 = off), `backstop_place_open_set` (`open`), `backstop_take_fee_set` (`bps`).
       parameters:
         - { $ref: '#/components/parameters/Limit' }
         - { $ref: '#/components/parameters/Cursor' }
@@ -566,6 +570,10 @@ paths:
         - name: market
           in: query
           schema: { type: integer, minimum: 0, maximum: 255 }
+        - name: kind
+          in: query
+          description: Only rows of this kind (e.g. `backstop_taken`).
+          schema: { type: string }
       responses:
         '200':
           description: Events
@@ -580,6 +588,41 @@ paths:
                         type: array
                         items: { $ref: '#/components/schemas/BackstopEvent' }
         '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/backstop/state:
+    get:
+      tags: [market]
+      operationId: getBackstopState
+      summary: Event-derived backstop phase 2 state per market
+      description: |
+        Last `BackstopCfgSet` per market, whether the market is currently elevated (last Elevated/Relaxed event), counts of takes and unwinds, plus the
+        global `place_open` flag and `take_fee_bps` (null until the first event). Derived from events only: the live inventory notional and the current
+        auction quote are contract views (`backstopAuction(market)`), the indexer does not poll views.
+      responses:
+        '200':
+          description: State
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      markets:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            market: { type: integer }
+                            elevated: { type: boolean }
+                            elevated_notional: { type: [string, 'null'] }
+                            cfg: { type: [object, 'null'] }
+                            takes: { type: integer }
+                            unwinds: { type: integer }
+                      place_open: { type: [boolean, 'null'] }
+                      take_fee_bps: { type: [integer, 'null'] }
+                  indexed_block: { type: integer }
         '429': { $ref: '#/components/responses/RateLimited' }
   /v1/transfers:
     get:
@@ -1064,7 +1107,7 @@ components:
     BackstopEvent:
       type: object
       properties:
-        kind: { type: string, enum: [backstop_synced, adl_skipped, adl_hard_prem_set, withdraw_gate_set] }
+        kind: { type: string, enum: [backstop_synced, adl_skipped, adl_hard_prem_set, withdraw_gate_set, backstop_elevated, backstop_relaxed, backstop_taken, backstop_unwound, backstop_cfg_set, backstop_place_open_set, backstop_take_fee_set] }
         market: { type: [integer, 'null'] }
         target: { type: [string, 'null'] }
         equity_before: { type: [string, 'null'] }
@@ -1075,6 +1118,20 @@ components:
         slack: { type: [string, 'null'] }
         bps: { type: [integer, 'null'] }
         threshold: { type: [string, 'null'] }
+        notional: { type: [string, 'null'] }
+        taker: { type: [string, 'null'] }
+        acct: { type: [string, 'null'] }
+        taker_sold: { type: [boolean, 'null'] }
+        size: { type: [string, 'null'] }
+        price: { type: [integer, 'null'] }
+        disc_bps: { type: [string, 'null'] }
+        fee: { type: [string, 'null'] }
+        soft_notional: { type: [string, 'null'] }
+        max_disc_bps: { type: [integer, 'null'] }
+        dwell: { type: [integer, 'null'] }
+        ramp: { type: [integer, 'null'] }
+        max_age: { type: [integer, 'null'] }
+        open: { type: [boolean, 'null'] }
         block: { type: integer }
         log_index: { type: integer }
         ts: { type: integer }

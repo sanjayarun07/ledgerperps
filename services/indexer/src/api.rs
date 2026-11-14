@@ -690,6 +690,7 @@ async fn backstop_events(AxState(app): AxState<App>, Query(q): Query<HashMap<Str
     let p = P(q);
     let (limit, cursor, desc) = (p.limit()?, p.cursor()?, p.desc()?);
     let market = p.market()?;
+    let kind = p.0.get("kind").map(|s| s.as_str());
     let st = app.shared.state.read().unwrap();
     let pg = page_idx(
         st.backstop.len(),
@@ -697,12 +698,52 @@ async fn backstop_events(AxState(app): AxState<App>, Query(q): Query<HashMap<Str
         cursor,
         limit,
         desc,
-        |i| market.is_none_or(|m| st.backstop[i].market == Some(m)),
+        |i| market.is_none_or(|m| st.backstop[i].market == Some(m)) && kind.is_none_or(|k| st.backstop[i].kind == k),
     );
     let rows: Vec<&BackstopRow> = pg.idx.iter().map(|i| &st.backstop[*i]).collect();
     let out = many(&app, rows, pg.next);
     drop(st);
     out
+}
+
+/// Event-derived backstop Phase 2 state per market (last `BackstopCfgSet`, elevated/relaxed flag, take counts) plus the global
+/// place-open flag and take fee. Live inventory / auction price are NOT here: read `backstopAuction(market)` from the chain.
+async fn backstop_state(AxState(app): AxState<App>) -> R {
+    let st = app.shared.state.read().unwrap();
+    let mut mk: std::collections::BTreeMap<u8, Value> = std::collections::BTreeMap::new();
+    let (mut place_open, mut take_fee) = (Value::Null, Value::Null);
+    for r in &st.backstop {
+        let e = r.market.map(|m| mk.entry(m).or_insert_with(|| json!({"market": m, "elevated": false, "elevated_notional": null, "cfg": null, "takes": 0, "unwinds": 0})));
+        match r.kind {
+            "backstop_cfg_set" => {
+                e.unwrap()["cfg"] = json!({"soft_notional": r.soft_notional, "max_disc_bps": r.max_disc_bps, "dwell": r.dwell, "ramp": r.ramp, "max_age": r.max_age, "block": r.block});
+            }
+            "backstop_elevated" => {
+                let e = e.unwrap();
+                e["elevated"] = json!(true);
+                e["elevated_notional"] = json!(r.notional);
+            }
+            "backstop_relaxed" => {
+                let e = e.unwrap();
+                e["elevated"] = json!(false);
+                e["elevated_notional"] = Value::Null;
+            }
+            "backstop_taken" => {
+                let e = e.unwrap();
+                e["takes"] = json!(e["takes"].as_u64().unwrap_or(0) + 1);
+            }
+            "backstop_unwound" => {
+                let e = e.unwrap();
+                e["unwinds"] = json!(e["unwinds"].as_u64().unwrap_or(0) + 1);
+            }
+            "backstop_place_open_set" => place_open = json!(r.open),
+            "backstop_take_fee_set" => take_fee = json!(r.bps),
+            _ => {}
+        }
+    }
+    let markets: Vec<Value> = mk.into_values().collect();
+    drop(st);
+    one(&app, json!({"markets": markets, "place_open": place_open, "take_fee_bps": take_fee}))
 }
 
 // ------------------------------------------------------------------------------------------------ ops endpoints
@@ -1105,6 +1146,7 @@ pub fn router(app: App) -> Router {
         .route("/liquidations", get(liquidations))
         .route("/bad-debt", get(bad_debt))
         .route("/backstop/events", get(backstop_events))
+        .route("/backstop/state", get(backstop_state))
         .route("/transfers", get(all_transfers))
         .route("/tx/track", post(tx_track).layer(axum::extract::DefaultBodyLimit::max(1024)))
         .route("/tx/{hash}", get(tx_status))

@@ -9,8 +9,8 @@
 //! Detection (views only, then `eth_call` simulation as the final authority):
 //!   * isolated bucket: `positions(a,m)` has `isolated && size == 0 && isoMargin < 0`;
 //!   * cross bucket: no open cross position and `accountState(a).equity < 0`.
-//! The cross loss is booked to one market's `adlDebt`: the first non-isolated market where the backstop holds inventory
-//! (ADL needs it), else the first non-isolated market.
+//!     The cross loss is booked to one market's `adlDebt`: the first non-isolated market where the backstop holds inventory
+//!     (ADL needs it), else the first non-isolated market.
 use crate::{
     abi::IPerp,
     actions::{Ctx, Outcome},

@@ -284,6 +284,46 @@ pub enum Ev {
         amount: u128,
     },
     /// Any other ABI event (AccessControl, EIP712 domain, ...) is stored but has no read model.
+    /// Backstop Phase 2: market's backstop inventory notional crossed the soft cap (elevated).
+    BackstopElevated {
+        market: u8,
+        #[serde(with = "dec_u128")]
+        notional: u128,
+    },
+    BackstopRelaxed { market: u8 },
+    /// Dutch-auction take: `acct` traded `size` at `price` against the BACKSTOP (no Fill event is emitted).
+    BackstopTaken {
+        market: u8,
+        taker: Address,
+        acct: B256,
+        taker_sold: bool,
+        #[serde(with = "dec_u128")]
+        size: u128,
+        price: u64,
+        #[serde(with = "dec_u128")]
+        disc_bps: u128,
+        #[serde(with = "dec_u128")]
+        fee: u128,
+    },
+    /// Keeper unwind: `target` closed `size` at mark against the BACKSTOP (no Fill event is emitted).
+    BackstopUnwound {
+        market: u8,
+        target: B256,
+        #[serde(with = "dec_u128")]
+        size: u128,
+        price: u64,
+    },
+    BackstopCfgSet {
+        market: u8,
+        #[serde(with = "dec_u128")]
+        soft_notional: u128,
+        max_disc_bps: u16,
+        dwell: u32,
+        ramp: u32,
+        max_age: u32,
+    },
+    BackstopPlaceOpenSet { open: bool },
+    BackstopTakeFeeSet { bps: u32 },
     /// Backstop (BACKSTOP-1) sync: deficit charged to insurance / recorded as debt, or earlier draws repaid.
     BackstopSynced {
         #[serde(with = "dec_i128")]
@@ -349,6 +389,13 @@ impl Ev {
             Ev::AdlSkipped { .. } => "AdlSkipped",
             Ev::AdlHardPremSet { .. } => "AdlHardPremSet",
             Ev::WithdrawGateSet { .. } => "WithdrawGateSet",
+            Ev::BackstopElevated { .. } => "BackstopElevated",
+            Ev::BackstopRelaxed { .. } => "BackstopRelaxed",
+            Ev::BackstopTaken { .. } => "BackstopTaken",
+            Ev::BackstopUnwound { .. } => "BackstopUnwound",
+            Ev::BackstopCfgSet { .. } => "BackstopCfgSet",
+            Ev::BackstopPlaceOpenSet { .. } => "BackstopPlaceOpenSet",
+            Ev::BackstopTakeFeeSet { .. } => "BackstopTakeFeeSet",
             Ev::Other { name } => name,
         }
     }
@@ -724,6 +771,34 @@ fn build(name: &str, a: &Args) -> anyhow::Result<Ev> {
         },
         "AdlHardPremSet" => Ev::AdlHardPremSet { bps: a.u32("bps")? },
         "WithdrawGateSet" => Ev::WithdrawGateSet { threshold: a.u128("threshold")? },
+        "BackstopElevated" => Ev::BackstopElevated { market: a.u8("market")?, notional: a.u128("notional")? },
+        "BackstopRelaxed" => Ev::BackstopRelaxed { market: a.u8("market")? },
+        "BackstopTaken" => Ev::BackstopTaken {
+            market: a.u8("market")?,
+            taker: a.addr("taker")?,
+            acct: a.b32("acct")?,
+            taker_sold: a.b("takerSold")?,
+            size: a.u128("size")?,
+            price: a.u64("price")?,
+            disc_bps: a.u128("discBps")?,
+            fee: a.u128("fee")?,
+        },
+        "BackstopUnwound" => Ev::BackstopUnwound {
+            market: a.u8("market")?,
+            target: a.b32("target")?,
+            size: a.u128("size")?,
+            price: a.u64("price")?,
+        },
+        "BackstopCfgSet" => Ev::BackstopCfgSet {
+            market: a.u8("market")?,
+            soft_notional: a.u128("softNotional")?,
+            max_disc_bps: a.u16("maxDiscBps")?,
+            dwell: a.u32("dwell")?,
+            ramp: a.u32("ramp")?,
+            max_age: a.u32("maxAge")?,
+        },
+        "BackstopPlaceOpenSet" => Ev::BackstopPlaceOpenSet { open: a.b("open")? },
+        "BackstopTakeFeeSet" => Ev::BackstopTakeFeeSet { bps: a.u32("bps")? },
         other => Ev::Other { name: other.to_string() },
     })
 }
@@ -753,6 +828,13 @@ mod tests {
             "AdlSkipped",
             "AdlHardPremSet",
             "WithdrawGateSet",
+            "BackstopElevated",
+            "BackstopRelaxed",
+            "BackstopTaken",
+            "BackstopUnwound",
+            "BackstopCfgSet",
+            "BackstopPlaceOpenSet",
+            "BackstopTakeFeeSet",
         ] {
             assert!(names.contains(n), "{n} missing from ABI");
         }

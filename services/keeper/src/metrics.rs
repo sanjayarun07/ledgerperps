@@ -17,6 +17,16 @@ pub struct ReasonLabel {
     pub reason: String,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct FeedLabel {
+    pub feed: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct ResultLabel {
+    pub result: String,
+}
+
 pub struct Metrics {
     registry: Registry,
     pub liquidations_sent: Counter,
@@ -40,6 +50,15 @@ pub struct Metrics {
     pub reorgs: Counter,
     pub rpc_active_endpoint: Gauge,
     pub multicall_enabled: Gauge,
+    // ---- Pyth pusher
+    pub pyth_age_seconds: Family<FeedLabel, Gauge>,
+    pub pyth_push: Family<ResultLabel, Counter>,
+    pub pyth_fee_wei: Counter,
+    pub pyth_gas_wei: Counter,
+    pub pyth_hermes_errors: Family<KindLabel, Counter>,
+    pub pyth_budget_spent_wei: Gauge,
+    pub pyth_backoff_seconds: Gauge,
+    pub pyth_enabled: Gauge,
 }
 
 impl Metrics {
@@ -68,6 +87,14 @@ impl Metrics {
             reorgs: Counter::default(),
             rpc_active_endpoint: Gauge::default(),
             multicall_enabled: Gauge::default(),
+            pyth_age_seconds: Family::default(),
+            pyth_push: Family::default(),
+            pyth_fee_wei: Counter::default(),
+            pyth_gas_wei: Counter::default(),
+            pyth_hermes_errors: Family::default(),
+            pyth_budget_spent_wei: Gauge::default(),
+            pyth_backoff_seconds: Gauge::default(),
+            pyth_enabled: Gauge::default(),
         };
         r.register("liquidations_sent", "Liquidation transactions mined successfully", m.liquidations_sent.clone());
         r.register("txs_sent", "Transactions mined successfully, by kind", m.txs_sent.clone());
@@ -90,6 +117,14 @@ impl Metrics {
         r.register("reorgs", "Chain reorganisations detected by the block-hash check", m.reorgs.clone());
         r.register("rpc_active_endpoint", "Index of the RPC endpoint currently preferred", m.rpc_active_endpoint.clone());
         r.register("multicall_enabled", "1 when reads are batched through Multicall3", m.multicall_enabled.clone());
+        r.register("pyth_age_seconds", "Chain time minus the on-chain Pyth publishTime, per feed (alert above half the exchange's max age)", m.pyth_age_seconds.clone());
+        r.register("pyth_push", "Pyth pusher decisions by result (sent, dry_run, skipped_*, failed_*)", m.pyth_push.clone());
+        r.register("pyth_fee_wei", "Pyth update fees paid (wei)", m.pyth_fee_wei.clone());
+        r.register("pyth_gas_wei", "Gas paid for Pyth pushes (wei)", m.pyth_gas_wei.clone());
+        r.register("pyth_hermes_errors", "Hermes request failures by kind (unauthorized, rate_limited, server, client, network, bad_body)", m.pyth_hermes_errors.clone());
+        r.register("pyth_budget_spent_wei", "Wei spent (or reserved) on Pyth pushes in the last hour", m.pyth_budget_spent_wei.clone());
+        r.register("pyth_backoff_seconds", "Seconds the pusher will wait before its next attempt after a failure (0 = none)", m.pyth_backoff_seconds.clone());
+        r.register("pyth_enabled", "1 when the Pyth pusher is enabled", m.pyth_enabled.clone());
         Metrics { registry: r, ..m }
     }
 
@@ -101,6 +136,10 @@ impl Metrics {
 
     pub fn inc_kind(fam: &Family<KindLabel, Counter>, kind: &str) {
         fam.get_or_create(&KindLabel { kind: kind.to_string() }).inc();
+    }
+
+    pub fn inc_pyth(&self, result: &str) {
+        self.pyth_push.get_or_create(&ResultLabel { result: result.to_string() }).inc();
     }
 
     pub fn inc_revert(&self, kind: &str, reason: &str) {

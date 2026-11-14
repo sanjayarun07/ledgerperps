@@ -119,7 +119,7 @@ async function all(p, order = "asc") {
     const frankPos = (await get(`/v1/accounts/${expected.accts.frank}/positions?include_closed=true`)).body.data.find((p) => p.market === 2);
     eq(frankPos.size, "0", "ADL target frank (short 6 SOL) was force-closed");
     const gracePos = (await get(`/v1/accounts/${expected.accts.grace}/positions?include_closed=true`)).body.data.find((p) => p.market === 2);
-    eq(gracePos.size, (-(4n * 10n ** 8n)).toString(), "grace (not a target) keeps her 4 SOL short");
+    eq(gracePos.size, (-(4n * 10n ** 8n) + BigInt(A.phase2.unwSize)).toString(), "grace (not an ADL target) keeps her 4 SOL short minus what the phase 2 unwind closed");
     eq(BigInt(adl.size).toString(), (6n * 10n ** 8n).toString(), "ADL closed 6 SOL (the target's whole position)");
     const erinPos = (await get(`/v1/accounts/${expected.accts.erin}/positions?include_closed=true`)).body.data.find((p) => p.market === 2);
     eq(erinPos.size, "0", "liquidated erin is flat");
@@ -128,7 +128,8 @@ async function all(p, order = "asc") {
     eq([bsPos.size, bsPos.basis], [A.backstopNow.size, A.backstopNow.basis], "backstop size+basis after liquidation+ADL equal positions(BACKSTOP) on chain");
     ok(bsPos.approximate === true && BigInt(bsPos.realized_pnl_error_bound) > 0n, `backstop flagged approximate with an explicit pnl error bound (${bsPos.realized_pnl_error_bound} micro-USDC)`);
     // exact backstop realised pnl on its ADL leg (liquidation price == mark == 80 here): reduce at mk => 0. Indexer must be within its bound.
-    const exactPnl = 0n;
+    // phase 2: the backstop also sold `takeSize` to alice at `takePrice` (basis 80): realised (p-80)*size; the unwind runs at mark 80 => 0
+    const exactPnl = ((BigInt(A.phase2.takePrice) - 80000000n) * BigInt(A.phase2.takeSize)) / 100000000n;
     const diff = BigInt(bsPos.realized_pnl) - exactPnl;
     ok((diff < 0n ? -diff : diff) <= BigInt(bsPos.realized_pnl_error_bound), `backstop realised pnl ${bsPos.realized_pnl} vs exact ${exactPnl} within bound ${bsPos.realized_pnl_error_bound}`);
     // the backstop price estimated from AdlExecuted(price, size, debtCleared) recovers the oracle mark (80) to within 1e8/size + 1
@@ -137,6 +138,27 @@ async function all(p, order = "asc") {
     const tol = 100000000n / BigInt(adl.size) + 1n;
     const d2 = est - 80000000n;
     ok((d2 < 0n ? -d2 : d2) <= tol, `estimated backstop fill price ${est} vs real mark 80000000 (|err| ${d2 < 0n ? -d2 : d2} <= ${tol})`);
+  }
+
+  console.log("== backstop phase 2 events vs chain");
+  {
+    const P2 = expected.adl.phase2;
+    const be = await all("/v1/backstop/events", "asc");
+    const kinds = be.map((r) => r.kind);
+    for (const [k, n] of [["backstop_cfg_set", 1], ["backstop_take_fee_set", 1], ["backstop_place_open_set", 2], ["backstop_elevated", 1], ["backstop_taken", 1], ["backstop_unwound", 1]]) {
+      eq(kinds.filter((x) => x === k).length, n, `/v1/backstop/events has ${n} ${k}`);
+    }
+    const tk = be.find((r) => r.kind === "backstop_taken");
+    eq([tk.size, String(tk.price), tk.fee, tk.disc_bps, tk.taker_sold, tk.market], [P2.takeSize, P2.takePrice, P2.takeFee, P2.takeDisc, P2.takerSold, 2], "BackstopTaken row equals the ethers-decoded event");
+    eq(tk.taker.toLowerCase(), P2.alice.toLowerCase(), "BackstopTaken taker address");
+    const uw = be.find((r) => r.kind === "backstop_unwound");
+    eq([uw.size, String(uw.price), uw.target], [P2.unwSize, P2.unwPrice, expected.accts.grace], "BackstopUnwound row equals the ethers-decoded event");
+    eq((await all("/v1/backstop/events?kind=backstop_taken")).length, 1, "/v1/backstop/events?kind= filter");
+    const st = (await get("/v1/backstop/state")).body.data;
+    const m2 = st.markets.find((m) => m.market === 2);
+    ok(m2 && m2.cfg && m2.cfg.soft_notional === "1000000" && m2.cfg.max_age === 60 && m2.takes === 1 && m2.unwinds === 1, "/v1/backstop/state per-market cfg and take/unwind counts");
+    eq([st.place_open, st.take_fee_bps], [true, 5], "/v1/backstop/state place_open + take_fee_bps");
+    ok(typeof m2.elevated === "boolean", "elevated flag derived from the last Elevated/Relaxed event");
   }
 
   console.log("== per-event counters vs ethers-decoded counts");

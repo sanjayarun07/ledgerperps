@@ -40,7 +40,7 @@ impl RevertKind {
         match self {
             OracleDegraded | MarketRestricted | NotYet => Disposition::Wait,
             NotLiquidatable | Inactive => Disposition::Skip,
-            BadParam(w) if matches!(w.as_str(), "no adl debt" | "no position" | "nothing to write off") => Disposition::Skip,
+            BadParam(w) if matches!(w.as_str(), "no adl debt" | "no position" | "nothing to write off" | "not elevated" | "nothing to unwind") => Disposition::Skip,
             _ => Disposition::Fail,
         }
     }
@@ -76,7 +76,7 @@ pub fn classify_revert(data: &[u8]) -> RevertKind {
         Ok(E::NotLiquidatable(_)) => RevertKind::NotLiquidatable,
         Ok(E::BadParam(b)) => match b.what.as_str() {
             "inactive" => RevertKind::Inactive,
-            "too early" | "not triggered" => RevertKind::NotYet,
+            "too early" | "not triggered" | "not due" => RevertKind::NotYet,
             w => RevertKind::BadParam(w.to_string()),
         },
         Ok(E::NotAuthorized(_)) => RevertKind::Known("not_authorized"),
@@ -85,6 +85,8 @@ pub fn classify_revert(data: &[u8]) -> RevertKind {
         Ok(E::TooManyOrders(_)) => RevertKind::Known("too_many_orders"),
         // withdraw-only (unresolved bad debt above the gate and amount > principal); the keeper never withdraws, but decode it cleanly
         Ok(E::WithdrawGated(_)) => RevertKind::Known("withdraw_gated"),
+        // backstopPlace only (soft cap exceeded); the keeper never places backstop orders, but decode it cleanly
+        Ok(E::BackstopCap(_)) => RevertKind::Known("backstop_cap"),
         Ok(E::ReentrancyGuardReentrantCall(_)) => RevertKind::Known("reentrancy"),
         Err(_) => match alloy::sol_types::decode_revert_reason(data) {
             Some(r) => RevertKind::Unknown(r),
@@ -126,6 +128,16 @@ mod tests {
         let k = classify_revert(&IPerp::WithdrawGated {}.abi_encode());
         assert_eq!(k, RevertKind::Known("withdraw_gated"));
         assert_eq!(k.label(), "withdraw_gated");
+    }
+
+    #[test]
+    fn backstop_phase2_errors_classify() {
+        assert_eq!(classify_revert(&IPerp::BackstopCap {}.abi_encode()), RevertKind::Known("backstop_cap"));
+        let enc = |s: &str| IPerp::BadParam { what: s.to_string() }.abi_encode();
+        assert_eq!(classify_revert(&enc("not due")).disposition(), Disposition::Wait, "unwind before maxAge: retry later");
+        assert_eq!(classify_revert(&enc("not elevated")).disposition(), Disposition::Skip);
+        assert_eq!(classify_revert(&enc("nothing to unwind")).disposition(), Disposition::Skip);
+        assert_eq!(classify_revert(&enc("not in profit")).disposition(), Disposition::Fail);
     }
 
     #[test]

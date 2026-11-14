@@ -45,11 +45,13 @@ fn every_function_event_and_error_the_keeper_uses_exists_in_the_merged_abi() {
         IPerp::liqFeeBpsCall, IPerp::keeperShareBpsCall, IPerp::closeFactorBpsCall, IPerp::fullCloseNotionalCall,
         IPerp::getMarketCall, IPerp::pokeFundingCall, IPerp::liquidateCall, IPerp::executeConditionalCall,
         IPerp::executeTwapSliceCall, IPerp::adlCall, IPerp::writeOffCall,
-        IPerp::syncBackstopCall, IPerp::adlHealthCall, IPerp::backstopEquityCall, IPerp::bsInsDrawnCall, IPerp::bsDebtCall, IPerp::unresolvedBadDebtCall);
+        IPerp::syncBackstopCall, IPerp::adlHealthCall, IPerp::backstopEquityCall, IPerp::bsInsDrawnCall, IPerp::bsDebtCall, IPerp::unresolvedBadDebtCall,
+        IPerp::backstopCfgCall, IPerp::backstopAuctionCall, IPerp::pokeBackstopCall, IPerp::unwindBackstopCall);
     ev_sigs!(abi, IPerp::Deposit, IPerp::Fill, IPerp::CondPlaced, IPerp::CondTriggered, IPerp::CondCanceled,
-        IPerp::TwapPlaced, IPerp::TwapDone, IPerp::TwapCanceled, IPerp::Liquidated, IPerp::BadDebtUnresolved, IPerp::BackstopSynced, IPerp::AdlSkipped);
+        IPerp::TwapPlaced, IPerp::TwapDone, IPerp::TwapCanceled, IPerp::Liquidated, IPerp::BadDebtUnresolved, IPerp::BackstopSynced, IPerp::AdlSkipped,
+        IPerp::BackstopElevated, IPerp::BackstopRelaxed, IPerp::BackstopTaken, IPerp::BackstopUnwound);
     err_sigs!(abi, IPerp::NotAuthorized, IPerp::BadParam, IPerp::MarketRestricted, IPerp::OracleDegraded, IPerp::Unhealthy,
-        IPerp::NotLiquidatable, IPerp::Expired, IPerp::TooManyOrders, IPerp::ReentrancyGuardReentrantCall, IPerp::WithdrawGated);
+        IPerp::NotLiquidatable, IPerp::Expired, IPerp::TooManyOrders, IPerp::ReentrancyGuardReentrantCall, IPerp::WithdrawGated, IPerp::BackstopCap);
 }
 
 #[test]
@@ -79,4 +81,82 @@ fn get_market_tuple_layout_matches_the_hardcoded_word_indexes() {
     for c in &comps[..=MARKET_FUNDING_INTERVAL_WORD] {
         assert!(!c.ty.starts_with("tuple") && !c.ty.contains('[') && c.ty != "bytes" && c.ty != "string", "non-static field {} before fundingInterval", c.name);
     }
+}
+
+// ------------------------------------------------------------------------------------------------------------------ Pyth (pusher)
+// The repo does not vendor Pyth's ABI. The sources of truth it DOES contain are (1) the `IPythLike` interface in PythAdapter.sol
+// (what the exchange's oracle reads) and (2) the human-readable ABI in the manual push script (what is known to work on the
+// testnet). The keeper's `IPyth` must agree with both, and with Pyth's published selectors.
+use perp_keeper::abi::IPyth;
+
+fn read_repo(rel: &str) -> Option<String> {
+    std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel)).ok()
+}
+
+fn require_text(rel: &str) -> String {
+    match read_repo(rel) {
+        Some(t) => t,
+        None if std::env::var("KEEPER_ABI_OPTIONAL").is_ok() => { eprintln!("{rel} not found; skipped"); std::process::exit(0) }
+        None => panic!("{rel} not found (set KEEPER_ABI_OPTIONAL=1 to skip)"),
+    }
+}
+
+/// Quoted strings of `const PYTH_ABI = [ "...", "..." ];` in pyth.js.
+fn js_abi_lines(js: &str) -> Vec<String> {
+    let start = js.find("PYTH_ABI").expect("PYTH_ABI in pyth.js");
+    let rest = &js[start..];
+    let body = &rest[rest.find('[').expect("[")..rest.find("];").expect("];")];
+    body.split('"').skip(1).step_by(2).map(str::to_string).collect()
+}
+
+#[test]
+fn pyth_selectors_are_pinned_to_pyths_published_ones() {
+    // Published Pyth EVM (IPyth) selectors; they cannot change without Pyth shipping a different interface.
+    assert_eq!(alloy::hex::encode(IPyth::getPriceUnsafeCall::SELECTOR), "96834ad3");
+    assert_eq!(alloy::hex::encode(IPyth::getUpdateFeeCall::SELECTOR), "d47eed45");
+    assert_eq!(alloy::hex::encode(IPyth::updatePriceFeedsCall::SELECTOR), "ef9e5e28");
+}
+
+#[test]
+fn pyth_abi_matches_the_manual_push_script() {
+    let js = require_text("contracts/scripts/testnet/pyth.js");
+    let abi = JsonAbi::parse(js_abi_lines(&js).iter().map(String::as_str)).expect("pyth.js ABI parses");
+    let has = |sig: &str| abi.functions().any(|f| f.signature() == sig);
+    assert!(has(<IPyth::getUpdateFeeCall as SolCall>::SIGNATURE), "getUpdateFee drifted from pyth.js: {}", <IPyth::getUpdateFeeCall as SolCall>::SIGNATURE);
+    assert!(has(<IPyth::updatePriceFeedsCall as SolCall>::SIGNATURE), "updatePriceFeeds drifted from pyth.js");
+    let upd = &abi.function("updatePriceFeeds").unwrap()[0];
+    assert_eq!(format!("{:?}", upd.state_mutability), "Payable", "updatePriceFeeds must stay payable");
+    assert_eq!(abi.function("getUpdateFee").unwrap()[0].outputs.iter().map(|o| o.ty.as_str()).collect::<Vec<_>>(), vec!["uint256"]);
+}
+
+#[test]
+fn pyth_get_price_unsafe_matches_the_adapter_the_exchange_uses() {
+    let sol = require_text("contracts/src/oracles/PythAdapter.sol");
+    // normalise whitespace so formatting changes do not matter
+    let flat = sol.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(flat.contains("struct Price { int64 price; uint64 conf; int32 expo; uint256 publishTime; }"), "IPythLike.Price changed: update abi::IPyth::Price");
+    assert!(flat.contains("function getPriceUnsafe(bytes32 id) external view returns (Price memory);"), "IPythLike.getPriceUnsafe changed: update abi::IPyth");
+    // the keeper's struct is the same shape
+    let p = IPyth::Price { price: -1, conf: 2, expo: -8, publishTime: alloy::primitives::U256::from(3) };
+    let enc = alloy::sol_types::SolValue::abi_encode(&p);
+    assert_eq!(enc.len(), 4 * 32, "four static words: price, conf, expo, publishTime");
+}
+
+#[test]
+fn testnet_config_feed_ids_are_the_ones_the_keeper_would_use() {
+    // sanity: every market feed id in the testnet config is a 32-byte hex id the keeper's config parser accepts
+    let Some(txt) = read_repo("infra/testnet/testnet.config.json") else { return };
+    let v: serde_json::Value = serde_json::from_str(&txt).expect("testnet.config.json");
+    let ids: Vec<String> = v["markets"].as_array().unwrap().iter().filter_map(|m| m["pyth"]["feedId"].as_str().map(str::to_string)).collect();
+    assert!(!ids.is_empty());
+    let c = perp_keeper::config::Config::from_raw(perp_keeper::config::RawConfig {
+        rpc_url: Some("http://x".into()),
+        exchange: Some("0x5FbDB2315678afecb367f032d93F642f64180aa3".into()),
+        enable_pyth_push: Some(true),
+        pyth_contract: v["pyth"]["address"].as_str().map(str::to_string),
+        pyth_feed_ids: Some(ids.clone()),
+        ..Default::default()
+    })
+    .expect("testnet config values are accepted by the keeper config");
+    assert_eq!(c.pyth.feeds.len(), ids.len());
 }

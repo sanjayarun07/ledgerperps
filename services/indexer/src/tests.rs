@@ -282,6 +282,36 @@ fn backstop_adl_skip_and_gate_events_are_indexed_and_survive_snapshots() {
 }
 
 #[test]
+fn backstop_phase2_events_move_positions_and_are_served_state() {
+    let bs = crate::state::backstop_key();
+    let mut s = Script::new();
+    s.push(0, 10, vec![vec![Ev::BackstopCfgSet { market: 0, soft_notional: 1_000_000, max_disc_bps: 300, dwell: 60, ramp: 600, max_age: 3600 },
+        Ev::BackstopPlaceOpenSet { open: false }, Ev::BackstopTakeFeeSet { bps: 5 }]]);
+    s.push(0, 20, vec![vec![Ev::BackstopElevated { market: 0, notional: 2_000_000 }]]);
+    // acct 3 SOLD 1 BTC to the backstop (backstop long, taker short); acct 4 BOUGHT 0.5 from it
+    s.push(0, 30, vec![vec![
+        Ev::BackstopTaken { market: 0, taker: Address::repeat_byte(3), acct: acct(3), taker_sold: true, size: BTC, price: 50_000 * PX, disc_bps: 120, fee: 25_000 },
+        Ev::BackstopTaken { market: 0, taker: Address::repeat_byte(4), acct: acct(4), taker_sold: false, size: BTC / 2, price: 50_000 * PX, disc_bps: 120, fee: 12_000 },
+    ]]);
+    s.push(0, 40, vec![vec![Ev::BackstopUnwound { market: 0, target: acct(3), size: BTC / 4, price: 49_000 * PX }, Ev::BackstopRelaxed { market: 0 }]]);
+    let st = apply_script(&s);
+    let pos = |a: B256| st.positions.get(&(a, 0)).map(|p| p.size).unwrap_or(0);
+    assert_eq!(pos(acct(3)), -(BTC as i128) + (BTC / 4) as i128, "taker short 1 BTC, unwound by 0.25 at mark");
+    assert_eq!(pos(acct(4)), (BTC / 2) as i128);
+    assert_eq!(pos(bs), BTC as i128 - (BTC / 2) as i128 - (BTC / 4) as i128);
+    assert_eq!(st.positions.get(&(acct(3), 0)).unwrap().fees_paid, 25_000);
+    assert_eq!(st.counters.unknown_refs, 0);
+    let kinds: Vec<_> = st.backstop.iter().map(|r| r.kind).collect();
+    assert_eq!(kinds, vec!["backstop_cfg_set", "backstop_place_open_set", "backstop_take_fee_set", "backstop_elevated", "backstop_taken", "backstop_taken", "backstop_unwound", "backstop_relaxed"]);
+    assert_eq!(st.backstop[0].soft_notional.as_deref(), Some("1000000"));
+    assert_eq!(st.backstop[4].taker_sold, Some(true));
+    assert_eq!(st.backstop[4].fee.as_deref(), Some("25000"));
+    let back = State::from_snapshot(&st.to_snapshot(), &st).expect("snapshot restores the phase 2 rows");
+    assert_eq!(back.backstop, st.backstop);
+    assert_eq!(back.digest(), st.digest());
+}
+
+#[test]
 fn order_lifecycle_from_events() {
     let st = apply_script(&scenario());
     let o = |id: u64| st.orders.get(&id).unwrap();

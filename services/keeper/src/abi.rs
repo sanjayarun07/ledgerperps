@@ -47,6 +47,13 @@ sol! {
         function writeOff(bytes32 a, uint8 market) external;
         /// Permissionless; idempotent. Records the backstop's mark-to-market deficit (insurance first, then bad debt) or repays earlier draws.
         function syncBackstop() external;
+        /// Phase 2: per-market inventory config (softNotional == 0 => feature off) and the elevation clock (`elevatedSince` == 0 => not elevated).
+        function backstopCfg(uint8 market) external view returns (uint128 softNotional, uint16 maxDiscBps, uint32 dwell, uint32 ramp, uint32 maxAge, uint64 elevatedSince);
+        function backstopAuction(uint8 market) external view returns (bool active, bool takerSells, uint256 price, uint256 discBps, uint256 size);
+        /// Permissionless; refreshes the elevation clock with the current mark (starts or stops the Dutch auction). No keeper reward.
+        function pokeBackstop(uint8 market) external;
+        /// Permissionless; after `maxAge` of elevation, closes ranked profitable opposite-side accounts AT MARK against the backstop. No reward.
+        function unwindBackstop(bytes32[] calldata targets, uint8 market) external;
 
         // ---- events scanned for discovery
         event Deposit(bytes32 indexed acct, address indexed from, uint256 amount);
@@ -59,6 +66,10 @@ sol! {
         event TwapCanceled(uint64 indexed id, uint128 filled);
         event BackstopSynced(int256 equityBefore, uint256 fromInsurance, uint256 toDebt, uint8 indexed market, uint256 refundedInsurance, uint256 repaidDebt);
         event AdlSkipped(bytes32 indexed target, uint8 indexed market, uint256 slack);
+        event BackstopElevated(uint8 indexed market, uint256 notional);
+        event BackstopRelaxed(uint8 indexed market);
+        event BackstopTaken(uint8 indexed market, address indexed taker, bytes32 acct, bool takerSold, uint128 size, uint64 price, uint256 discBps, uint256 fee);
+        event BackstopUnwound(uint8 indexed market, bytes32 indexed target, uint128 size, uint64 price);
         event BadDebtUnresolved(bytes32 indexed acct, uint256 amount);
         event Liquidated(bytes32 indexed acct, uint8 indexed market, address indexed keeper, uint128 size, uint64 price, uint256 fee, uint256 badDebt);
 
@@ -72,6 +83,20 @@ sol! {
         error Expired();
         error TooManyOrders();
         error WithdrawGated();
+        error BackstopCap();
         error ReentrancyGuardReentrantCall();
+    }
+}
+
+sol! {
+    /// The subset of the Pyth EVM contract (`IPyth`) the pusher uses. The repo does not vendor Pyth's ABI, so
+    /// `tests/abi_drift.rs` checks these signatures against `contracts/src/oracles/PythAdapter.sol` (`getPriceUnsafe`, `Price`) and the
+    /// human-readable ABI in `contracts/scripts/testnet/pyth.js` (`getUpdateFee`, `updatePriceFeeds`), plus pinned selectors.
+    #[sol(rpc)]
+    interface IPyth {
+        struct Price { int64 price; uint64 conf; int32 expo; uint256 publishTime; }
+        function getPriceUnsafe(bytes32 id) external view returns (Price memory);
+        function getUpdateFee(bytes[] calldata updateData) external view returns (uint256 feeAmount);
+        function updatePriceFeeds(bytes[] calldata updateData) external payable;
     }
 }
