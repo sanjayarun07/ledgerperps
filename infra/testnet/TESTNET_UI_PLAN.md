@@ -21,3 +21,11 @@ Also needed on testnet (feature work, not strings):
 * Link every tx hash and the exchange address to https://sepolia.arbiscan.io.
 * Markets: all three have Chainlink+Pyth feeds. Any future market without a feed must show `manual-oracle-only (testnet demo)`.
 * Build env: see `env.testnet.example` (NEXT_PUBLIC_RPC_URL, NEXT_PUBLIC_CHAIN_ID=421614, NEXT_PUBLIC_INDEXER_URL).
+
+## Update (round 3): DEMO-USD market and Backstop status
+
+* A fourth market `DEMO-USD` (id 3) exists on testnet only. Its price is set by the admin through a ManualOracle behind a RoutingOracle: it is NOT a real feed. The UI must label it **`DEMO - admin-set price`** in the market list and show a banner on the ticket ("demo market, admin-set price, not a real feed"). Local chains keep their three markets and never show the tag. Marked the same way in `infra/testnet/testnet.config.json` (`demo.label`).
+* The market list must be derived from `deployment.marketIds` (not a hardcoded 3), so DEMO-USD appears only when the deployment has it.
+* Status popover has a "Backstop" entry: inventory notional vs soft threshold, auction active / price / discount, dashes when the contract or indexer cannot answer.
+* Activity and notifications cover `BackstopElevated`, `BackstopTaken`, `BackstopUnwound`; `BackstopCap` has a plain-language message.
+* Demo steps and expected output: `docs/TESTNET_RUNBOOK.md` section 16.

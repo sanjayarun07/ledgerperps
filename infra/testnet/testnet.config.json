@@ -36,10 +36,39 @@
     }
   },
   "oracle": {
-    "medianMaxAgeSecs": 3600,
+    "medianMaxAgeSecs": 14400,
     "medianMaxDevBps": 300,
     "pythMaxConfBps": 100,
-    "notes": "MedianOracle reverts if either source is older than medianMaxAgeSecs. Pyth is pull: it is stale unless something pushes updates (see TESTNET_RUNBOOK). Chainlink testnet heartbeats: BTC/ETH 120s, SOL 86400s per Chainlink's directory, hence the generous 3600s. The same bytes32 (Pyth feed id) is the market feed key in BOTH adapters."
+    "notes": "MedianOracle reverts if either source is older than medianMaxAgeSecs. Pyth is pull: it is stale unless something pushes updates (see TESTNET_RUNBOOK). Chainlink testnet heartbeats: BTC/ETH 120s, SOL 86400s per Chainlink's directory, hence the generous 3600s. The same bytes32 (Pyth feed id) is the market feed key in BOTH adapters.",
+    "mode": "chainlink",
+    "modeRule": "ORACLE_MODE env overrides. Default 'median' (Chainlink + Pyth through MedianOracle, both sources must be fresh) ONLY IF verify-addresses.js reports every Pyth feed fresh (age <= pythFreshSecs) AND a Pyth pusher is running; otherwise 'chainlink' (ChainlinkAdapter is the exchange oracle directly, Pyth is not used). verify-addresses.js prints the recommendation; the config default stays 'chainlink' until Pyth is observed fresh.",
+    "pythFreshSecs": 600,
+    "chainlinkGapMeasurement": {
+      "measuredAt": "2026-11-14",
+      "method": "read-only getRoundData over the last 25 rounds of each feed via the public Arbitrum Sepolia RPC (no key, no tx)",
+      "BTC-USD": {
+        "rounds": 26,
+        "gapMinSecs": 120,
+        "gapMedianSecs": 149,
+        "gapP95Secs": 150,
+        "gapMaxSecs": 150
+      },
+      "ETH-USD": {
+        "rounds": 26,
+        "gapMinSecs": 15,
+        "gapMedianSecs": 15,
+        "gapP95Secs": 60,
+        "gapMaxSecs": 60
+      },
+      "SOL-USD": {
+        "rounds": 26,
+        "gapMinSecs": 60,
+        "gapMedianSecs": 630,
+        "gapP95Secs": 8100,
+        "gapMaxSecs": 10591
+      },
+      "rule": "market maxAge >= p95 gap with margin (we use >= 1.3x the worst observed gap, rounded): BTC 600 (4x p95), ETH 600 (10x p95), SOL 14400 (1.36x the max 10591 and 1.8x p95; the SOL testnet feed updates on a 24h heartbeat/deviation and is bursty). A longer maxAge weakens staleness protection; on mainnet use the feed's real heartbeat."
+    }
   },
   "markets": [
     {
@@ -77,7 +106,7 @@
         "maxOrderSize": "100000000",
         "maxOI": "1000000000",
         "minNotional": "10000000",
-        "maxAge": 3600,
+        "maxAge": 600,
         "bandBps": 500,
         "maxSpreadBps": 100,
         "fundingInterval": 3600,
@@ -137,7 +166,7 @@
         "maxOrderSize": "2000000000",
         "maxOI": "20000000000",
         "minNotional": "10000000",
-        "maxAge": 3600,
+        "maxAge": 600,
         "bandBps": 500,
         "maxSpreadBps": 100,
         "fundingInterval": 3600,
@@ -197,7 +226,45 @@
         "maxOrderSize": "40000000000",
         "maxOI": "400000000000",
         "minNotional": "10000000",
-        "maxAge": 3600,
+        "maxAge": 14400,
+        "bandBps": 500,
+        "maxSpreadBps": 100,
+        "fundingInterval": 3600,
+        "premiumDivisor": 8,
+        "fundingCap": "400000000",
+        "tiers": [
+          {
+            "upToNotional": "100000000000",
+            "imrBps": 1000,
+            "mmrBps": 500
+          },
+          {
+            "upToNotional": "1000000000000",
+            "imrBps": 2000,
+            "mmrBps": 1000
+          },
+          {
+            "upToNotional": "340282366920938463463374607431768211455",
+            "imrBps": 5000,
+            "mmrBps": 2500
+          }
+        ]
+      }
+    },
+    {
+      "name": "DEMO-USD",
+      "marketId": 3,
+      "oracleMode": "demo",
+      "demo": true,
+      "label": "DEMO - admin-set price, not a real feed",
+      "feedId": "0x88b60ec3b4ac835582503f2542b46d708b1ea9e49fd140b5ec143fdb3d7fbd7f",
+      "params": {
+        "tick": "10000",
+        "lot": "100000",
+        "maxOrderSize": "500000000",
+        "maxOI": "1000000000",
+        "minNotional": "1000000",
+        "maxAge": 1800,
         "bandBps": 500,
         "maxSpreadBps": 100,
         "fundingInterval": 3600,
@@ -223,5 +290,28 @@
       }
     }
   ],
-  "differencesFromLocalDeployJs": "maxOrderSize/maxOI reduced ~10000x (sizes in 1e8 units: BTC 1 / 10 BTC, ETH 20 / 200, SOL 400 / 4000). Everything else (tick, lot, tiers, fees, band, funding) identical to scripts/deploy.js. Oracle = MedianOracle(Chainlink, Pyth) instead of ManualOracle; collateral = Circle test USDC instead of MockUSDC."
+  "differencesFromLocalDeployJs": "maxOrderSize/maxOI reduced ~10000x (sizes in 1e8 units: BTC 1 / 10 BTC, ETH 20 / 200, SOL 400 / 4000). Everything else (tick, lot, tiers, fees, band, funding) identical to scripts/deploy.js. Oracle = ChainlinkAdapter (default) or MedianOracle(Chainlink, Pyth) instead of ManualOracle (plus RoutingOracle + ManualOracle for the optional DEMO-USD market); collateral = Circle test USDC instead of MockUSDC.",
+  "demo": {
+    "enabled": true,
+    "label": "DEMO - admin-set price, not a real feed",
+    "note": "Optional 4th market priced by a ManualOracle that only the deployer can move, routed by RoutingOracle. It exists so the backstop Phase 2 path (liquidation -> inventory -> Dutch auction) can be shown on testnet, because real Chainlink/Pyth prices cannot be moved on demand. Never treat its price as market data. Disable with DEMO_MARKET=no.",
+    "startPrice": "100000000"
+  },
+  "backstop": {
+    "_readme": "Values for enable-backstop.js (setBackstopCfg: softNotional in micro-USDC, bounds maxDiscBps<=min(300,bandBps), ramp>=60, maxAge>=dwell+ramp). BTC-USD scaled from docs/RUNBOOKS.md 0b (soft = 2% of maxOI notional at ~65k = 13,000 USDC, maxDiscBps 100, dwell 60, ramp 600, maxAge 1800). DEMO-USD is tiny and fast on purpose so it can be watched within minutes.",
+    "BTC-USD": {
+      "softNotional": "13000000000",
+      "maxDiscBps": 100,
+      "dwell": 60,
+      "ramp": 600,
+      "maxAge": 1800
+    },
+    "DEMO-USD": {
+      "softNotional": "10000000",
+      "maxDiscBps": 150,
+      "dwell": 30,
+      "ramp": 120,
+      "maxAge": 600
+    }
+  }
 }

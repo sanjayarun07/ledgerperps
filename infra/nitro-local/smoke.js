@@ -89,6 +89,25 @@ async function main() {
   const after = await usdc.balanceOf(keeper.address);
   console.log("  withdraw balance delta (6dp):", (after - before).toString());
 
+
+  // --- backstop PHASE 2 (round 3): cfg, poke, auction view, take, forced unwind. Real-time waits (no time travel on Nitro). ---
+  console.log("backstop phase 2: cfg soft 1 USDC, maxDisc 300 bps, dwell 0, ramp 60, maxAge 60");
+  await send("setBackstopCfg", ex.setBackstopCfg(0, usd(1), 300, 0, 60, 60));
+  await refresh(FEED0, 45500);
+  await send("pokeBackstop (starts the elevation clock)", E(keeper).pokeBackstop(0));
+  await send("pokeBackstop (no-op, already elevated)", E(keeper).pokeBackstop(0));
+  const auctionGas = await ex.backstopAuction.estimateGas(0);
+  console.log("backstopAuction(0) view estimateGas".padEnd(48), String(auctionGas), "| result", (await ex.backstopAuction(0)).map(String).join(","));
+  rows.push({ name: "backstopAuction (view, estimateGas)", gasUsedTotal: Number(auctionGas), gasUsedForL1: 0, l2Execution: Number(auctionGas), hardhat: null });
+  console.log("waiting 62 s of real time for maxAge...");
+  await sleep(62000);
+  await refresh(FEED0, 45500);
+  await send("takeBackstop (partial, keeper takes 0.01)", E(keeper).takeBackstop(keeper.address, 0, 0, btc(0.01), px(60000)));
+  const bobKey = await ex.acctKey(bob.address, 0);
+  await send("unwindBackstop (1 target)", E(keeper).unwindBackstop([bobKey], 0));
+  await send("setBackstopCfg (off)", ex.setBackstopCfg(0, 0, 0, 0, 60, 60));
+  const p2 = true;
+
   const out = { date: new Date().toISOString(), chainId: Number((await p.getNetwork()).chainId), exchange: await ex.getAddress(), rows, notes: [fundingNote] };
   fs.writeFileSync(path.resolve(__dirname, "smoke-last-run.json"), JSON.stringify(out, null, 2));
   console.log("wrote infra/nitro-local/smoke-last-run.json");

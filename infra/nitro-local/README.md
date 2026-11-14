@@ -129,3 +129,9 @@ Cannot: L1 data cost (L1 price ~0 here), real L1 reorg/finality behaviour, mainn
 2. `cd contracts && npx hardhat --config hardhat.nitro.config.js run scripts/deploy.js --network nitroLocal`, then each script above.
 3. Keeper/indexer: see section 5 (`createdb perps_nitro_local`; `SVC_PHASE=fund|trade|crash|truth`).
 Teardown is the user's: `cd infra/nitro-local/nitro-testnode && docker compose down` (images stay). The node was left RUNNING by me.
+
+## Redeploy after backstop Phase 2 (2026-11-14)
+Fresh deploy (storage appended, so no upgrade in place) with `hardhat.nitro.config.js` and the unmodified `scripts/deploy.js`; JSON-RPC only, the node was NOT restarted or re-initialised.
+`deployments/nitroLocal.json` now holds: exchange `0x21fA4fF19424fA1d1A4990134f04c5462A3BeF0b`, usdc `0xCACd7Ed912C4c02B6A0a3F5600993F9f66d5dF1D`, oracle `0xDdb3705371A90953e232dfa643F7194E56019eA2`. The Phase 1 file is `nitroLocal.previous3.json`, the old smoke output `smoke-last-run.previous3.json` (the older backups are unchanged).
+`code-size.js` on the live chain, byte-for-byte equal to the artifacts: **PerpExchange 22,697; PerpTrading 17,815; PerpExtras 19,034; PerpLiquidation 18,306; PerpTwap 10,701; PerpAdl 15,112** (limit 24,576; PerpExchange headroom 1,879 B). The probe: 24,576 deploys, 24,577 and larger revert.
+`smoke.js` now has a backstop Phase 2 block (setBackstopCfg, pokeBackstop twice, backstopAuction view, a 62 s real-time wait, takeBackstop, unwindBackstop, cfg off; exit 0). Gas per op and deltas versus the previous Nitro run are in `docs/BENCHMARKS.md` ("Nitro local"): fills +0.7 to +1.0%, rests/cancels +0.04 to +0.1%, liquidate +3.4%, pokeFunding unchanged; `pokeBackstop` no-op 56,445, `takeBackstop` partial 212,812, `unwindBackstop` (1 target) 131,935.

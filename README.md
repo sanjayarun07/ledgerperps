@@ -9,8 +9,8 @@ Canonical state (order book, positions, margin, funding, liquidations) lives in 
 ## Layout
 | Path | What | Notes |
 |---|---|---|
-| `contracts/` | Router `PerpExchange` + modules `PerpTrading`, `PerpExtras`, `PerpLiquidation`, `PerpTwap`, `PerpAdl` (shared storage in `PerpBase`, delegatecall), oracle adapters, mocks | all 6 deployed contracts < 24,576 bytes (PerpExchange 22,425; PerpExtras 18,495; PerpTrading 17,573; PerpLiquidation 13,835; PerpAdl 13,557; PerpTwap 10,465) |
-| `contracts/test/` | Hardhat tests incl. `fuzz.test.js` (fast-check) | 82 passing, 0 pending |
+| `contracts/` | Router `PerpExchange` + modules `PerpTrading`, `PerpExtras`, `PerpLiquidation`, `PerpTwap`, `PerpAdl` (shared storage in `PerpBase`, delegatecall), oracle adapters, mocks | all 6 deployed contracts < 24,576 bytes (PerpExchange 22,697; PerpExtras 19,034; PerpTrading 17,815; PerpLiquidation 18,306; PerpAdl 15,112; PerpTwap 10,701; RoutingOracle 739) |
+| `contracts/test/` | Hardhat tests incl. `fuzz.test.js` (fast-check) | 94 passing, 0 pending |
 | `contracts/foundry-test/` | Foundry unit, fuzz and invariant tests | 26 passing |
 | `services/keeper/` | Rust keeper: funding, liquidation, conditional/TWAP triggers, ADL, permissionless `writeOff` sweep, `syncBackstop` | see its README |
 | `services/indexer/` | Rust indexer + REST/WS API on PostgreSQL | OpenAPI in `docs/openapi.yaml` there |
@@ -31,7 +31,7 @@ Units and formulas: `docs/SPEC.md`. Gaps and known weaknesses: `docs/GAPS.md`.
 ## Run
 ```bash
 cd contracts && pnpm install
-npx hardhat test                  # 82 passing (includes fuzz and stress suites, ~4 min)
+npx hardhat test                  # 94 passing (includes fuzz and stress suites, ~4 min)
 forge test                        # 26 Foundry tests (needs Foundry)
 npx hardhat node                  # terminal 1
 npx hardhat run scripts/deploy.js --network localhost   # terminal 2 -> deployments/localhost.json (mock USDC + manual oracle)

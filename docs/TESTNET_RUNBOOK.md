@@ -41,11 +41,13 @@ Every broadcast is a dry run until you set its own `CONFIRM_*=yes` for that sing
 
 ```bash
 unset DEPLOYER_PRIVATE_KEY TRADER2_PRIVATE_KEY   # optional: makes everything read-only even if .env has a key
-node --test scripts/testnet/tests/lib.test.js                                  # 14 guard/config tests (agent)
+node --test scripts/testnet/tests/lib.test.js scripts/testnet/tests/backstop-guards.test.js   # 14 + 6 guard/config tests (agent)
+$HH run scripts/testnet/tests/selectors-check.js                               # every merged-ABI function is registered by deploy-testnet.js (agent)
+$HH run scripts/testnet/tests/backstop-scripts-local.js                        # enable-backstop + demo-backstop end to end on in-process chain (agent)
 SMOKE_NO_MAIN=1 $HH run scripts/testnet/tests/local-e2e.js                     # smoke logic on in-process chain (agent)
 LOCAL_SIMULATE=1 $HH run scripts/testnet/deploy-testnet.js                     # deploy plan on in-process chain (agent)
 ```
-Expected: 14 pass; "14 ok / 0 failed" for markets 0,1,2; a 19-step table ending `Local sanity: 31 selectors routed correctly; modulesLocked=false; marketCount=3`.
+Expected: 14 + 6 pass; `selectors-check: PASSED`; `ALL BACKSTOP SCRIPT CHECKS PASSED`; "14 ok / 0 failed" for markets 0,1,2,3; a 23-step table ending `Local sanity: 38 selectors routed correctly; modulesLocked=false; marketCount=4`.
 Abort if any fails: do not continue.
 
 ## 4. Environment check (agent: read-only; user: with key)
@@ -76,21 +78,25 @@ $HH run scripts/testnet/verify-addresses.js --network arbitrumSepolia           
 **Known problem:** when tested, both `https://hermes.pyth.network` and `https://hermes-beta.pyth.network` answered `401 unauthorized` on `/v2/updates/price/latest` (the `/v2/price_feeds` listing worked). So the dry run currently fails at the fetch. Set `HERMES_URL` to an endpoint you can use (do not paste a keyed URL in chat). Whether the Arbitrum Sepolia Pyth contract expects the stable or the beta Hermes channel is **unverified**; the contract answered with stable feed ids, but the simulated `updatePriceFeeds` (the script simulates before sending) will tell you.
 **Decision point:** if after a push the two prices differ by more than 3 percent for a market, either change `oracle.medianMaxDevBps` in `testnet.config.json` BEFORE deploying (it is an immutable constructor argument) or accept that this market's reads revert.
 
-### TODO (feature, not implemented): `keeper pyth pusher`
-The keeper (`services/keeper`) has no Pyth pusher. Needed interface:
-* config: `pyth_address`, `hermes_url` (+ optional auth header env), `pyth_feed_ids[]` (the market feed ids), `pyth_push_interval_secs` (<= 60), `pyth_max_fee_wei`.
-* loop: fetch `/v2/updates/price/latest?ids[]=...&encoding=hex`, `getUpdateFee(bytes[])`, simulate `updatePriceFeeds` (eth_call), send with `value=fee`, only if on-chain `publishTime` older than `pyth_min_age_secs` or deviation > threshold (saves gas).
-* also push immediately before liquidation/pokeFunding actions when the age exceeds `medianMaxAgeSecs/2`.
-* metrics: `keeper_pyth_age_seconds{feed}`, `keeper_pyth_push_total{result}`, `keeper_pyth_fee_wei_total`; alert if age > 1800 s.
-* uses `KEEPER_PRIVATE_KEY` (must hold ETH); must respect `dry_run`.
-Until it exists, `push-pyth.js` (manual) or `SMOKE_PUSH_PYTH=yes` is the only way to keep the oracle alive.
+### Keeper Pyth pusher (implemented; off by default)
+`services/keeper` can keep Pyth fresh itself (`src/features/pyth_push.rs`; details, metrics and failure handling in `services/keeper/README.md` "Pyth price pusher", operations in `docs/RUNBOOKS.md` 1a). It is unit-tested against mocks and a fake node only; it has **not** been run against Arbitrum Sepolia or a real Hermes (no usable Hermes endpoint was available), so treat the first live run as a test.
+```bash
+# keeper env (see infra/testnet/env.testnet.example): KEEPER_PRIVATE_KEY (testnet-only key with a little ETH), HERMES_API_KEY (Hermes needs a key; the keeper also accepts KEEPER_HERMES_API_KEY), optional KEEPER_HERMES_URL (default https://pyth.dourolabs.app/hermes)
+KEEPER_ENABLE_PYTH_PUSH=true \
+KEEPER_PYTH_CONTRACT=0x4374e5a8b9C22271E9EB878A2AA31DE97DF15DAF \
+KEEPER_PYTH_FEED_IDS=BTC=0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43,ETH=0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace,SOL=0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d \
+KEEPER_DRY_RUN=true  perp-keeper ...        # first: dry-run, watch keeper_pyth_push_total{result="dry_run"} and the `pyth:` logs
+```
+Then drop `KEEPER_DRY_RUN` to let it send. Defaults: check every 20 s, push when any feed is older than 1800 s (half of `medianMaxAgeSecs` 3600), at most 0.0001 ETH update fee per push, gas <= $0.50 per push, 0.005 ETH per rolling hour (fee + worst-case gas), all configurable (`KEEPER_PYTH_*`). It will not push when Hermes has nothing newer than the chain, and it backs off on Hermes 401/429/5xx. The **Hermes 401 problem above** is solved by a key: the keeper sends `Authorization: Bearer $HERMES_API_KEY` to `https://pyth.dourolabs.app/hermes` by default (verified for the manual curl-equivalent by the project owner). To check the real response format with your key: `PYTH_LIVE_TEST=1 HERMES_API_KEY=... cargo test --test hermes_live -- --nocapture` in `services/keeper`. Set `pyth_max_age_secs` to `oracle.medianMaxAgeSecs` from `testnet.config.json`.
+Metrics: `keeper_pyth_age_seconds{feed}` (alert > 1800), `keeper_pyth_push_total{result}`, `keeper_pyth_fee_wei_total`, `keeper_pyth_gas_wei_total`, `keeper_pyth_hermes_errors_total{kind}`.
+**Fallback:** `push-pyth.js` above (manual, or `SMOKE_PUSH_PYTH=yes`) remains the way to push by hand and to dry-run the Hermes channel question. The keeper does not remove the "decision point" below: the Chainlink vs Pyth 3 percent deviation check is independent of who pushes.
 
 ## 7. Deployment dry-run (agent with key-less read-only, or user)
 
 ```bash
 $HH run scripts/testnet/deploy-testnet.js --network arbitrumSepolia
 ```
-Prints: mode `DRY-RUN`, deployer, the ordered plan (ChainlinkAdapter + 3 `setFeed`, PythAdapter, MedianOracle, PerpExchange, 5 modules each followed by `registerModule`, 3 `createMarket`), predicted addresses, bytecode sizes (largest: PerpExchange 22,425 B < 24,576), gas estimates for steps that do not depend on undeployed contracts (calls show `estimate n/a`). Observed: about 23.5M gas for the deploys; reference gas from the in-process run for the dependent calls: setFeed 44k, registerModule 99k-348k, createMarket 288k each.
+Prints: mode `DRY-RUN`, deployer, the ordered plan (ChainlinkAdapter + 3 `setFeed`, PythAdapter, MedianOracle, PerpExchange, 5 modules each followed by `registerModule`, 4 `createMarket` incl. the DEMO-USD market, DemoManualOracle + RoutingOracle, one demo `set(100)`), predicted addresses, bytecode sizes (largest: PerpExchange 22,697 B < 24,576; PerpExtras 19,034; PerpLiquidation 18,306; PerpTrading 17,815; PerpAdl 15,112; PerpTwap 10,701; RoutingOracle 739), gas estimates for steps that do not depend on undeployed contracts (calls show `estimate n/a`). Observed: about 28M gas in total for chainlink mode (deploys ~25M, calls ~3M; 27.7M for the steps the local simulation shows); reference gas from the in-process run for the dependent calls: setFeed 44k, registerModule 99k-348k, createMarket 288k each.
 Optional env: `GUARDIAN_ADDRESS=0x..`, `USE_MOCK_USDC=yes` (deploys MockUSDC faucet token instead of using Circle USDC; useful if you cannot get faucet USDC).
 **Differences from `scripts/deploy.js` (local):** oracle = MedianOracle(Chainlink, Pyth) instead of ManualOracle; collateral = Circle test USDC instead of MockUSDC; `maxOrderSize`/`maxOI` cut about 10,000x (BTC 1 / 10, ETH 20 / 200, SOL 400 / 4000 units) to bound testnet exposure; tick, lot, minNotional, band, spread, funding, margin tiers identical; admin is the deployer EOA (as locally) and the module table is NOT locked.
 
@@ -101,13 +107,13 @@ Preconditions: steps 4-7 clean, `chmod 600 .env`, key in `.env`, `verifiedOnChai
 ```bash
 CONFIRM_TESTNET_DEPLOY=yes $HH run scripts/testnet/deploy-testnet.js --network arbitrumSepolia
 ```
-Expected: `MODE: BROADCAST`, 20 transactions (21 with GUARDIAN_ADDRESS) with block numbers, `Wrote contracts/deployments/arbitrumSepolia.json`. The script refuses to overwrite an existing deployment file. **Rollback:** there is none on-chain; testnet contracts are abandoned and redeployed (move the JSON aside first). If it fails midway, nothing is recorded in the JSON; note the addresses from the console and redeploy from scratch.
+Expected: `MODE: BROADCAST`, about 22 transactions in chainlink mode, 24 in median mode (+1 with GUARDIAN_ADDRESS) with block numbers, `Wrote contracts/deployments/arbitrumSepolia.json`. The script refuses to overwrite an existing deployment file. **Rollback:** there is none on-chain; testnet contracts are abandoned and redeployed (move the JSON aside first). If it fails midway, nothing is recorded in the JSON; note the addresses from the console and redeploy from scratch.
 Why the module table stays unlocked: `lockModules()` is irreversible. During smoke tests you may discover a module bug; with the table unlocked you can deploy a fixed module and `registerModule` it, with it locked you must redeploy everything. Lock after tests pass (step 13).
 Why ADMIN stays the deployer EOA: the smoke/rehearsal steps need admin calls. Hand over in step 14.
 
 ## 9. Check on Arbiscan (user)
 
-Open `https://sepolia.arbiscan.io/address/<exchange>`: contract created by `0x50C0...6B29`; 20 txs from the deployer in sequence; in Read Contract: `modulesLocked=false`, `marketCount=3`, `oracle` = the MedianOracle address, `usdc` = `0x75fa...AA4d`, `hasRole(DEFAULT_ADMIN_ROLE, deployer)=true`. The JSON also has every tx hash.
+Open `https://sepolia.arbiscan.io/address/<exchange>`: contract created by `0x50C0...6B29`; about 22 txs from the deployer in sequence; in Read Contract: `modulesLocked=false`, `marketCount=4`, `oracle` = the RoutingOracle address (its `main` is the ChainlinkAdapter, or the MedianOracle in median mode; `demoFeed` routes to the demo ManualOracle), `usdc` = `0x75fa...AA4d`, `hasRole(DEFAULT_ADMIN_ROLE, deployer)=true`. The JSON also has every tx hash.
 
 ## 10. Smoke test (agent can dry-run; USER broadcasts)
 
@@ -154,13 +160,13 @@ Deploys OpenZeppelin `TimelockController`, grants it `DEFAULT_ADMIN_ROLE`, optio
 
 * Liquidity: there are no real market makers. Any depth comes from your own bot (`bots/`) or manual orders; fills and prices are not meaningful market data.
 * Collateral is faucet USDC with no value; no bridge or custody flows are exercised.
-* Pyth freshness depends on a manual push until the keeper pusher exists.
+* Pyth freshness depends on a push: the keeper pusher (opt-in, section 6) or the manual script. The pusher needs a Hermes endpoint that does not answer 401.
 * Any market without a Chainlink+Pyth feed would be `manual-oracle-only (testnet demo)` (excluded from the deployment unless run locally). All three current markets have both feeds on-chain.
 * The keeper in the compose file is dry-run: liquidations are logged, not sent.
 
 ## What the testnet test does NOT prove
 
-Contract security or solvency under adversarial conditions (no audit); behaviour under mainnet price volatility or liquidity; economic soundness of the funding/margin parameters; oracle reliability (testnet Chainlink feeds are noisy/low-activity and Pyth is not pushed by default); real USDC behaviour (blacklisting, upgrades); Arbitrum sequencer outage handling (no sequencer-uptime check exists in `ChainlinkAdapter`); load, MEV, or keeper competition; the withdrawal-run window while bad debt exists; backstop phase 2 (not implemented); legal or compliance fitness.
+Contract security or solvency under adversarial conditions (no audit); behaviour under mainnet price volatility or liquidity; economic soundness of the funding/margin parameters; oracle reliability (testnet Chainlink feeds are noisy/low-activity and Pyth is not pushed unless you enable the keeper pusher or push by hand); real USDC behaviour (blacklisting, upgrades); Arbitrum sequencer outage handling (no sequencer-uptime check exists in `ChainlinkAdapter`); load, MEV, or keeper competition; the withdrawal-run window while bad debt exists; backstop phase 2 (not implemented); legal or compliance fitness.
 
 ## Verified facts (read-only, 2026-11-14)
 
@@ -175,3 +181,35 @@ Contract security or solvency under adversarial conditions (no audit); behaviour
 | Chainlink SOL/USD | `0x32377717BC9F9bA8Db45A244bCE77e7c0Cc5A775` (heartbeat 86400 s) | same | description "SOL / USD", updated ~12 min earlier |
 
 Chainlink on L2: Chainlink docs say L2 consumers should also check the Sequencer Uptime Feed; `ChainlinkAdapter` does not. Not addressed here.
+
+
+## 15. Oracle mode decision rule (ORACLE_MODE)
+
+`ORACLE_MODE=median|chainlink` (env overrides `oracle.mode` in `infra/testnet/testnet.config.json`; default `chainlink`).
+* `median`: Chainlink + Pyth through MedianOracle, BOTH must be fresh. Use it ONLY if `verify-addresses.js` prints `ORACLE MODE RECOMMENDATION: median` (every Pyth feed age <= `pythFreshSecs` = 600 s) AND the keeper Pyth pusher is running (section 6).
+* `chainlink`: ChainlinkAdapter is the exchange oracle directly; Pyth is not used. Observed 2026-11-14: Pyth feeds were 590,481 s old and nothing was pushing, so the recommendation is `chainlink` (that is the config default).
+* Per-market `maxAge` comes from measured Chainlink round gaps (read-only, last 25 rounds): BTC p95 150 s -> maxAge 600; ETH p95 60 s -> 600; SOL p95 8,100 s, max 10,591 s -> 14,400. The numbers and rule are in `oracle.chainlinkGapMeasurement`. A long SOL maxAge weakens staleness protection; testnet only.
+* DEMO-USD never uses either: it reads a ManualOracle that only the deployer can move (a "demo market, admin-set price, not a real feed"), routed by RoutingOracle because the exchange oracle is exchange-wide.
+
+## 16. The backstop demo: exact ordered USER command list ("see it on testnet")
+
+Everything below is run BY YOU with your own testnet key in `contracts/.env` (nothing here was or will be broadcast by an agent). `HH="npx hardhat --config hardhat.testnet.config.js"`, run from `contracts/`. Every broadcasting script is dry-run unless its confirm variable is set, refuses any chain other than 421614, and never prints a key.
+
+| # | Command | Broadcasts? | Expected |
+|---|---|---|---|
+| 1 | `$HH run scripts/testnet/check-env.js --network arbitrumSepolia` | no | `chainId OK 421614`, your address = expected deployer, ETH and USDC balances, `RESULT: PASS` |
+| 2 | `$HH run scripts/testnet/verify-addresses.js --network arbitrumSepolia` | no | `9 PASS / 0 FAIL` (DEMO-USD row says admin-set), then `ORACLE MODE RECOMMENDATION: chainlink` unless Pyth is fresh |
+| 3 | `$HH run scripts/testnet/deploy-testnet.js --network arbitrumSepolia` | no (dry-run) | `MODE: DRY-RUN`, plan with 4 markets, sizes (PerpExchange 22,697 B), no step fails |
+| 4 | `CONFIRM_TESTNET_DEPLOY=yes $HH run scripts/testnet/deploy-testnet.js --network arbitrumSepolia` | yes, ~22 txs, ~28M gas | `MODE: BROADCAST`, writes `contracts/deployments/arbitrumSepolia.json` |
+| 5 | `$HH run scripts/testnet/verify-contracts.js --network arbitrumSepolia` | no (needs `ARBISCAN_API_KEY`) | each contract `Verified` or `ALREADY` |
+| 6 | `CONFIRM_TESTNET_SMOKE=yes $HH run scripts/testnet/smoke-testnet.js --network arbitrumSepolia` | yes, about 15 txs | all stages ok; needs >= 5 USDC (`SMOKE_DEPOSIT_USDC`); writes `infra/testnet/smoke-last-run.json` |
+| 7 | `CONFIRM_ENABLE_BACKSTOP=yes $HH run scripts/testnet/enable-backstop.js --network arbitrumSepolia` | yes, 2 txs (BTC-USD + DEMO-USD `setBackstopCfg`, gas shown by the dry-run; `BACKSTOP_MARKETS=DEMO-USD` for only the demo) | table of values, `setBackstopCfg ok tx 0x...`; writes `infra/testnet/backstop-enable-last-run.json`. Run it without the variable first: it prints the plan |
+| 8 | `CONFIRM_BACKSTOP_DEMO=yes $HH run scripts/testnet/demo-backstop.js --network arbitrumSepolia` | yes, 14 txs (13 with a single key), ~1.73M gas | stages: set price 100, approve, deposit x2, short rests 0.5 @100, long buys it, price 90, liquidate the long, `syncBackstop`, prints state (backstop size 0.5, inventory ~45 USDC vs soft 10, auction price and discount), waits `dwell + 15` s (45 s), `takeBackstop`, `pokeBackstop`, restore price 100, withdraw both. Writes `infra/testnet/backstop-demo-last-run.json` with an Arbiscan link per tx. Set `DEMO_WAIT_SECS=150` to wait out the whole ramp and see the full 150 bps discount |
+
+Without the confirm variable, 7 and 8 are read-only dry-runs (plan, gas estimates, current state). A wrong chain, a missing confirm flag, a missing key, or a non-admin key aborts before any transaction. If the demo aborts midway it tries to restore the DEMO-USD price to 100 and reports which stage failed.
+
+**Cost versus your budget (about 20 test USDC, about 0.019 ETH).** Gas (local, exact): deploy about 28M, enable 2 txs (small), demo 1.73M, smoke about 1M. Arbitrum Sepolia fee read-only on 2026-11-14: gas price 0.0203 gwei, base fee 0.02 gwei. At that price deploy + enable + demo + smoke is about 30M gas = about 0.0006 ETH for L2 execution; the Arbitrum L1 data component is billed inside the same gas figure and for ~25 KB of bytecode normally multiplies the total by a small factor, so budget under 0.005 ETH in all, far below 0.019 ETH. The config file's conservative 3 gwei estimate (0.083 ETH for the deploy alone) would NOT fit, but that is a ceiling, not the observed price: check step 3's dry-run, which prints the current price and the total, and stop if it shows more than about 0.015 ETH. USDC: demo deposits 6 USDC per side (`DEMO_DEPOSIT_USDC`, 12 total with two keys, 6 with one; withdrawn again at the end) plus 5 USDC for the smoke test, about 17 USDC at most, within 20, and nearly all of it returns to your wallet via withdrawals. Reported figures are estimates until you run them.
+
+**Watching it.** UI: build the frontend with `node scripts/sync-deployment.mjs arbitrumSepolia` and the testnet env (`infra/testnet/env.testnet.example`); DEMO-USD shows a "DEMO - admin-set price" tag in the market list and a banner on the ticket. While step 8 runs, open the Status popover -> Backstop: inventory vs threshold, auction active, price and discount; the Activity tab shows `BackstopElevated`, `BackstopTaken`. Arbiscan: `https://sepolia.arbiscan.io/address/<exchange>#events` (topics BackstopElevated, BackstopTaken, Liquidated), and the transcript's per-tx links.
+
+**Restoring afterwards.** The demo restores the demo price itself. Switching the feature off again is not scripted: call `setBackstopCfg(market, 0, 0, 0, 0, 0)` from the admin account (softNotional 0 means off).
