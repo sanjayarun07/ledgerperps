@@ -39,7 +39,7 @@ export function usePosView(p: PositionInfo) {
     liq = p.isolated ? estimateLiqPrice({ size: p.size, mark, equity: p.iso.equity, mm: p.iso.mm, mmrBps: mmr }) : estimateLiqPrice({ size: p.size, mark, equity: acct.equity, mm: acct.mm, mmrBps: mmr });
   }
   const margin = p.isolated ? p.isoMargin : notional !== null && info ? (notional * imrBpsFor(notional, info.tiers) + 9999n) / 10000n : null;
-  const rules = allowedActions({ state: sm?.state ?? 0, globalPaused: sys?.globalPaused, oracleOk: sm?.oracleOk, name: name(p.market) });
+  const rules = allowedActions({ state: sm?.state ?? 0, globalPaused: sys?.globalPaused, oracleOk: sm?.oracleOk, name: name(p.market), oracle: MARKETS[p.market]?.oracle });
   return { w, acct, info, mark, entry, upnl, pct, notional, lev, liq, margin, rules };
 }
 

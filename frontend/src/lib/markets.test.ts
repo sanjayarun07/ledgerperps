@@ -17,3 +17,15 @@ describe("marketsFromDeployment", () => {
     expect(marketsFromDeployment({ marketIds: { "DEMO-USD": 0 } })[0].demo).toBe(true);
   });
 });
+
+describe("oracle kind per market", () => {
+  it("testnet chainlink deployment: real markets chainlink, DEMO demo", () => {
+    const m = marketsFromDeployment({ oracleMode: "chainlink", marketIds: { "BTC-USD": 0, "DEMO-USD": 3 }, demo: { market: "DEMO-USD" } });
+    expect(m.map((x) => x.oracle)).toEqual(["chainlink", "demo"]);
+  });
+  it("median mode and local (no oracleMode) deployments", () => {
+    expect(marketsFromDeployment({ oracleMode: "median", marketIds: { "BTC-USD": 0 } })[0].oracle).toBe("median");
+    expect(marketsFromDeployment({ marketIds: { "BTC-USD": 0 } })[0].oracle).toBe("manual");
+  });
+});
+

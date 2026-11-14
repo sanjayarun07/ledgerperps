@@ -45,3 +45,18 @@ describe("market state -> allowed actions (mirrors the contract rules)", () => {
     for (const s of [1, 2, 3, 4, 5]) expect(allowedActions({ state: s }).notice).toBeTruthy();
   });
 });
+
+describe("stale-price notice by oracle kind", () => {
+  it("demo market: admin-set price wording, no feed names", () => {
+    const a = allowedActions({ state: 0, oracleOk: false, name: "DEMO-USD", oracle: "demo" });
+    expect(a.open).toBe(false);
+    expect(a.notice).toMatch(/DEMO-USD uses an admin-set demo price/);
+    expect(a.notice).not.toMatch(/Pyth|Chainlink/);
+  });
+  it("chainlink-only market names Chainlink and not Pyth", () => {
+    const a = allowedActions({ state: 0, oracleOk: false, name: "BTC-USD", oracle: "chainlink" });
+    expect(a.notice).toMatch(/Chainlink price is stale/);
+    expect(a.notice).not.toMatch(/Pyth/);
+  });
+});
+

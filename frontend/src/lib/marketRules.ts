@@ -1,3 +1,4 @@
+import { demoStaleText } from "./network";
 /**
  * What a trader can do in each market state. Derived from the contract rules (PerpTrading._place, PerpExchange._requireMarketsOpenForWithdraw,
  * PerpExtras.cancelOrder/cancelAll, PerpLiquidation.settleDelisted), NOT from UI preference:
@@ -21,7 +22,7 @@ export interface Allowed {
   tone: "ok" | "warn" | "bad" | "info";
 }
 
-export function allowedActions(i: { state: number | MarketStateName; globalPaused?: boolean; oracleOk?: boolean; name?: string }): Allowed {
+export function allowedActions(i: { state: number | MarketStateName; globalPaused?: boolean; oracleOk?: boolean; name?: string; oracle?: "demo" | "chainlink" | "median" | "manual" }): Allowed {
   const s: MarketStateName = typeof i.state === "number" ? STATE_NAMES[i.state] ?? "Normal" : i.state;
   const n = i.name ?? "This market";
   const all = { cancel: true, addCollateral: true };
@@ -30,7 +31,7 @@ export function allowedActions(i: { state: number | MarketStateName; globalPause
   if (s === "Delisted")
     return { ...all, open: false, reduce: false, withdrawWithPosition: true, settleDelisted: true, tone: "bad", notice: `${n} is delisted. Orders are closed; settle your position at the final price, then withdraw.` };
   if (i.oracleOk === false)
-    return { ...all, open: false, reduce: false, withdrawWithPosition: false, settleDelisted: false, tone: "warn", notice: `Price feed delayed. New positions and closing orders in ${n} are temporarily unavailable; withdrawals with an open position are blocked. You can still cancel orders and add collateral.` };
+    return { ...all, open: false, reduce: false, withdrawWithPosition: false, settleDelisted: false, tone: "warn", notice: i.oracle === "demo" ? demoStaleText(n) : `Price feed delayed${i.oracle === "chainlink" ? " (the Chainlink price is stale)" : ""}. New positions and closing orders in ${n} are temporarily unavailable; withdrawals with an open position are blocked. You can still cancel orders and add collateral.` };
   switch (s) {
     case "Normal": return { ...all, open: true, reduce: true, withdrawWithPosition: true, settleDelisted: false, tone: "ok", notice: null };
     case "ReduceOnly": return { ...all, open: false, reduce: true, withdrawWithPosition: true, settleDelisted: false, tone: "warn", notice: `${n} is reduce-only. You can shrink or close positions, but not open or add to them.` };

@@ -166,7 +166,7 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
   if (v) {
     if (touched) for (const e of v.errors) checks.push({ kind: "fail", text: e });
   }
-  const rules = allowedActions({ state: ms?.state ?? 0, globalPaused: sys?.globalPaused, oracleOk: ms?.oracleOk, name });
+  const rules = allowedActions({ state: ms?.state ?? 0, globalPaused: sys?.globalPaused, oracleOk: ms?.oracleOk, name, oracle: MARKETS[market]?.oracle });
   const reducing = (isBuy && cur < 0n) || (!isBuy && cur > 0n);
   if (touched && v?.size) {
     const cp = canPlace(rules, reducing || ro2);

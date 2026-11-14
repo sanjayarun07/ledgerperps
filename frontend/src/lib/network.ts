@@ -99,8 +99,12 @@ export const ERC20_ABI = [
   { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
 ] as const;
 
+/** Demo market (admin-set ManualOracle behind RoutingOracle): there is no Pyth or Chainlink feed to blame. */
+export const demoStaleText = (name: string) => `${name} uses an admin-set demo price. It has not been refreshed recently, so new positions are paused on this market until the admin sets the price again. Other markets are unaffected.`;
 /** Oracle explanation for a degraded market. `ageSec` is the age of the freshest source if known. */
-export function oracleDegradedText(ageSec?: number): string {
+export function oracleDegradedText(ageSec?: number, kind?: "demo" | "chainlink" | "median" | "manual", name = "This market"): string {
+  if (kind === "demo") return demoStaleText(name);
   const age = ageSec === undefined ? "" : ` (last update ${ageSec < 120 ? `${ageSec}s` : `${Math.round(ageSec / 60)} min`} ago)`;
+  if (kind === "chainlink") return `Price feed delayed${age}: the Chainlink price is stale, so the exchange cannot trust the price. New positions are temporarily unavailable; you can still cancel orders and add collateral. It recovers on the next Chainlink update.`;
   return `Price feed delayed${age}: the Pyth or Chainlink price source is stale, so the exchange cannot trust the median price. New positions are temporarily unavailable; you can still cancel orders and add collateral. It recovers on the next oracle update.`;
 }

@@ -92,5 +92,11 @@ describe("receipts, confirmations, rate limits", () => {
 describe("oracle degraded text", () => {
   it("names the stale sources and the consequence", () => { const t = oracleDegradedText(); expect(t).toMatch(/Price feed delayed/); expect(t).toMatch(/Pyth or Chainlink/); expect(t).toMatch(/New positions are temporarily unavailable/); });
   it("includes the age when known", () => { expect(oracleDegradedText(45)).toContain("45s ago"); expect(oracleDegradedText(600)).toContain("10 min ago"); });
+  it("chainlink-only mode never mentions Pyth", () => { const t = oracleDegradedText(undefined, "chainlink", "BTC-USD"); expect(t).toMatch(/Chainlink price is stale/); expect(t).not.toMatch(/Pyth/); });
+  it("demo market says the price is admin-set", () => {
+    const t = oracleDegradedText(undefined, "demo", "DEMO-USD");
+    expect(t).toBe("DEMO-USD uses an admin-set demo price. It has not been refreshed recently, so new positions are paused on this market until the admin sets the price again. Other markets are unaffected.");
+    expect(t).not.toMatch(/Pyth|Chainlink/);
+  });
   it("table sanity", () => expect(NETWORKS[421614].chainId).toBe(421614));
 });

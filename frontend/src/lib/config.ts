@@ -25,14 +25,19 @@ export const IS_TESTNET = NETWORK_KIND === "testnet";
 export const usdcAbi = (IS_LOCAL ? usdcAbiJson : ERC20_ABI) as unknown as Abi;
 export const FEEDS = deployment.feeds as Record<string, Hex>;
 
-export interface MarketDef { id: number; name: string; base: string; /** Testnet demo market whose price is set by the admin; never a real feed. */ demo: boolean }
+export type OracleKind = "demo" | "chainlink" | "median" | "manual";
+export interface MarketDef { id: number; name: string; base: string; /** which price source feeds this market (from the deployment, not guessed from the name) */ oracle: OracleKind; /** Testnet demo market whose price is set by the admin; never a real feed. */ demo: boolean }
 export const DEMO_TAG = "DEMO - admin-set price";
 export const DEMO_BANNER = "Demo market: the price is set by the deployer account, not a real feed. It exists to show the backstop; do not read it as market data.";
 /** Markets come from the deployment (`marketIds`), so a testnet deployment with a DEMO-USD market shows it and a local one never does. */
-export function marketsFromDeployment(dep: { marketIds?: Record<string, number>; demo?: { market?: string } | null }): MarketDef[] {
+export function marketsFromDeployment(dep: { marketIds?: Record<string, number>; demo?: { market?: string } | null; oracleMode?: string }): MarketDef[] {
   const ids = dep.marketIds && Object.keys(dep.marketIds).length ? dep.marketIds : { "BTC-USD": 0, "ETH-USD": 1, "SOL-USD": 2 };
   return Object.entries(ids)
-    .map(([name, id]) => ({ id: Number(id), name, base: name.split("-")[0], demo: dep.demo?.market === name || name.startsWith("DEMO") }))
+    .map(([name, id]) => {
+      const demo = dep.demo?.market === name || name.startsWith("DEMO");
+      const mode = dep.oracleMode === "chainlink" || dep.oracleMode === "median" ? dep.oracleMode : "manual"; // local deployments have a ManualOracle
+      return { id: Number(id), name, base: name.split("-")[0], demo, oracle: (demo ? "demo" : mode) as OracleKind };
+    })
     .sort((a, b) => a.id - b.id);
 }
 export const MARKETS: readonly MarketDef[] = marketsFromDeployment(deployment as unknown as Parameters<typeof marketsFromDeployment>[0]);

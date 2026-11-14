@@ -48,7 +48,7 @@ function MarketRow({ id }: { id: number }) {
   const s = useStats24h(id).stats;
   const sys = useSystem().data;
   const sm = sys?.markets.find((x) => x.id === id);
-  const rules = allowedActions({ state: sm?.state ?? 0, globalPaused: sys?.globalPaused, oracleOk: sm?.oracleOk, name: m.name });
+  const rules = allowedActions({ state: sm?.state ?? 0, globalPaused: sys?.globalPaused, oracleOk: sm?.oracleOk, name: m.name, oracle: m.oracle });
   const open = () => { app.setMarket(id); app.setView("trade"); };
   return (
     <tr>
@@ -57,7 +57,7 @@ function MarketRow({ id }: { id: number }) {
       <td className={`r num ${s && s.changePct !== null ? (s.changePct >= 0 ? "long" : "short") : "mute"}`}>{s && s.changePct !== null ? <><Tri up={s.changePct >= 0} />{Math.abs(s.changePct).toFixed(2)}%</> : <span title="Needs at least 24h of trade history">-</span>}</td>
       <td className="r num">{fund ? fmtRatePct(fund.rate) : "-"}</td>
       <td className="r num">{info ? `${formatFixed(info.oi, 8, 3)} ${m.base}` : "-"}</td>
-      <td><span className={`state-tag ${rules.tone === "ok" ? "safe" : rules.tone === "bad" ? "bad" : "warn"}`}>{rules.tone === "ok" ? <Icon name="check" size={11} /> : <Icon name="alert" size={11} />}{info ? MARKET_STATES[info.state] : "-"}</span></td>
+      <td><span className={`state-tag ${rules.tone === "ok" ? "safe" : rules.tone === "bad" ? "bad" : "warn"}`}>{rules.tone === "ok" ? <Icon name="check" size={11} /> : <Icon name="alert" size={11} />}{sm && sm.oracleOk === false ? (m.demo ? "Demo price not refreshed" : "Price stale") : info ? MARKET_STATES[info.state] : "-"}</span></td>
       <td className="r"><button className="btn sm" onClick={open}>Trade</button></td>
     </tr>
   );

@@ -137,7 +137,7 @@ export function Footer() {
   const [open, setOpen] = useState(false);
   const app = useApp();
   const sm = sys.data?.markets.find((x) => x.id === app.market);
-  const rules = sys.data ? allowedActions({ state: sm?.state ?? 0, globalPaused: sys.data.globalPaused, oracleOk: sm?.oracleOk, name: MARKETS[app.market]?.name }) : null;
+  const rules = sys.data ? allowedActions({ state: sm?.state ?? 0, globalPaused: sys.data.globalPaused, oracleOk: sm?.oracleOk, name: MARKETS[app.market]?.name, oracle: MARKETS[app.market]?.oracle }) : null;
   const tradeText = !rules ? "Trading: unknown" : rules.open ? "Trading: open" : rules.reduce ? "Trading: reduce only" : "Trading: paused (cancel only)";
   let tone: "ok" | "warn" | "bad" = "ok", text = "Connected";
   if (sys.isError) { tone = "bad"; text = "Chain unreachable"; }

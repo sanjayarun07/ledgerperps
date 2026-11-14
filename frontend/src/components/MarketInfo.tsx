@@ -22,7 +22,7 @@ export default function MarketInfo({ market: id }: { market?: number }) {
   const sys = useSystem().data;
   const s24 = useStats24h(market).stats;
   const sm = sys?.markets.find((x) => x.id === market);
-  const rules = allowedActions({ state: sm?.state ?? 0, globalPaused: sys?.globalPaused, oracleOk: sm?.oracleOk, name: m.name });
+  const rules = allowedActions({ state: sm?.state ?? 0, globalPaused: sys?.globalPaused, oracleOk: sm?.oracleOk, name: m.name, oracle: m.oracle });
   const next = fund ? fund.lastFunding + fund.interval : 0;
   return (
     <div className="panel infopanel" aria-label={`${m.name} market information`}>
