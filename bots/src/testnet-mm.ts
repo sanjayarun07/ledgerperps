@@ -47,7 +47,7 @@ async function client() {
 }
 
 const marketNames = (d: { marketIds: Record<string, number> }) =>
-  (process.env.MARKETS ?? "BTC-USD,ETH-USD").split(",").map((s) => s.trim()).filter((n) => n in d.marketIds);
+  (process.env.MARKETS ?? "BTC-USD,ETH-USD,SOL-USD").split(",").map((s) => s.trim()).filter((n) => n in d.marketIds);
 
 async function main() {
   const cmd = process.argv[2];
