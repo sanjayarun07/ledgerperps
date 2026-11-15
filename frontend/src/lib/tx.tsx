@@ -131,7 +131,9 @@ export function TxProvider({ children }: { children: ReactNode }) {
       } else {
         // Pre-flight simulation: surfaces the decoded custom error before anything is signed. Not a result: just a guard.
         await publicClient.simulateContract(req);
-        hash = await client.writeContract({ ...req, chain: client.chain, account: client.account ?? account, ...(await feeCaps()) });
+        // A key held in the browser (session key, relayer) is sent with exactly the estimated gas, and on Arbitrum the estimate can land a few percent short of what the call then needs (first-touch storage, the fill path): "out of gas" with the gas spent. Add 40% headroom off-local; unused gas is not charged.
+        const gas = IS_LOCAL ? undefined : await publicClient.estimateContractGas(req).then((g) => (g * 14n) / 10n).catch(() => undefined);
+        hash = await client.writeContract({ ...req, chain: client.chain, account: client.account ?? account, ...(gas ? { gas } : {}), ...(await feeCaps()) });
       }
     } catch (e) { patch(id, { state: "failed", error: explainError(e, r.ctx) }); return "failed"; }
     patch(id, { state: "submitted", hash });
