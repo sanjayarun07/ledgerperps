@@ -71,6 +71,7 @@ export default function Header() {
                   {ticket.subaccounts && <label className="menu-row">Subaccount
                     <span className="inp" style={{ width: 64, minHeight: 32 }}><select value={w.sub} onChange={(e) => w.setSub(Number(e.target.value))} aria-label="Subaccount">{Array.from({ length: 8 }, (_, i) => <option key={i} value={i}>{i}</option>)}</select></span>
                   </label>}
+                  <CopyAddress address={w.address} />
                   <button role="menuitem" className="menu-item" onClick={() => { wallet.setOpen(false); ui.setDrawer("account"); }}>Account and security</button>
                   <button role="menuitem" className="menu-item" onClick={() => { wallet.setOpen(false); app.setView("notifications"); }}>Notifications{unread ? <span className="badge">{unread}</span> : null}</button>
                   <button role="menuitem" className="menu-item" onClick={() => { wallet.setOpen(false); w.disconnect(); }}>Disconnect</button>
@@ -96,6 +97,25 @@ export default function Header() {
         </div>
       </div>
     </header>
+  );
+}
+
+/** Shows the full address and copies it. Works for every wallet type (the email wallet has no extension to copy from). */
+function CopyAddress({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 1800); }
+    catch {
+      // clipboard blocked: select the text so Ctrl/Cmd+C works
+      const el = document.getElementById("wallet-addr-full"); if (el) { const r = document.createRange(); r.selectNodeContents(el); const sel = window.getSelection(); sel?.removeAllRanges(); sel?.addRange(r); }
+    }
+  };
+  return (
+    <div style={{ padding: "4px var(--s3) 8px" }}>
+      <div className="hint" style={{ margin: 0 }}>Your wallet address</div>
+      <code id="wallet-addr-full" style={{ display: "block", fontSize: 11, wordBreak: "break-all", userSelect: "all", margin: "2px 0 6px" }}>{address}</code>
+      <button type="button" role="menuitem" className="btn sm" onClick={() => void copy()} aria-live="polite">{copied ? "Copied" : "Copy address"}</button>
+    </div>
   );
 }
 
