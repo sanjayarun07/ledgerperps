@@ -126,7 +126,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [burnerAllowed, wagmiDisconnect]);
 
   const disconnect = useCallback(() => { setBurner(null); LS.set("perps.burner", null); setWantInjected(false); LS.set("perps.injected", "0"); wagmiDisconnect(); }, [wagmiDisconnect]);
-  const setSub = useCallback((n: number) => { setSubState(n); LS.set("perps.sub", String(n)); }, []);
+  // A session key is authorized per subaccount: switching subaccount turns it off (the owner wallet signs until the user enables it again), otherwise orders would be blocked on a subaccount the key was never approved for.
+  const setSub = useCallback((n: number) => { setSubState(n); LS.set("perps.sub", String(n)); setUseAgentKeyState(false); LS.set("perps.useAgent", "0"); }, []);
   const generateAgentKey = useCallback(() => { const k = generatePrivateKey(); setAgentPk(k); LS.set("perps.agentPk", k); }, []);
   const forgetAgentKey = useCallback(() => { setAgentPk(null); LS.set("perps.agentPk", null); setUseAgentKeyState(false); LS.set("perps.useAgent", "0"); }, []);
   const setUseAgentKey = useCallback((v: boolean) => { setUseAgentKeyState(v); LS.set("perps.useAgent", v ? "1" : "0"); }, []);

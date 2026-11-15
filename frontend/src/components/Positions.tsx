@@ -88,7 +88,7 @@ function CloseDialog({ p, onClose }: { p: PositionInfo; onClose: () => void }) {
   const walk = walkBook(levels, size);
   const est = walk.avg && v.mark ? closeEstimate({ positionSize: p.size, entry: v.entry, avgExit: walk.avg, closeSize: size, feeBps: 5n, marginReleased: v.margin !== null && full > 0n ? (v.margin * size) / full : 0n }) : null;
   const imp = impactBps(walk.avg, v.mark ?? 0n, isBuy);
-  const ok = v.rules.reduce && v.info && v.mark && size > 0n && walk.filled > 0n;
+  const ok = v.rules.reduce && v.info && v.mark && size > 0n; // not gated on the displayed book: it can be stale (indexer behind) and the IOC is safe, it simply does not fill without liquidity
   const attached = (useConditionals(v.w.acct).data ?? []).filter((c) => c.market === p.market && c.reduceOnly && c.active).length;
   const submit = () => {
     if (!v.info || !v.mark || !v.w.address) return;
@@ -113,6 +113,7 @@ function CloseDialog({ p, onClose }: { p: PositionInfo; onClose: () => void }) {
           <div className="kv"><span>Fee (est.)</span><span className="num">{est ? `${fmtUsd(est.fee)} USDC` : "-"}</span></div>
           <div className="kv"><span>Expected proceeds</span><span className="num">{est ? `${fmtUsd(est.proceeds)} USDC` : "-"}</span></div>
         </div>
+        {walk.filled === 0n && size > 0n && <p className="callout warn">The book shown here has no depth on the other side, or it is behind the chain. You can still send the close: it is a reduce-only IOC order, so it fills only if the chain has liquidity within 1% of the mark, and otherwise nothing changes (you pay gas only).</p>}
         {walk.filled < size && walk.filled > 0n && <p className="callout warn">The book only has {fmtSize(walk.filled)} {MARKETS[p.market].base} of depth: the rest of this order would be canceled.</p>}
         {!v.rules.reduce && <p className="callout bad">{v.rules.notice}</p>}
         {attached > 0 && size >= full && <p className="callout warn">This position has {attached} take-profit / stop-loss {attached === 1 ? "order" : "orders"} attached. They stay active after you close and do nothing without a position, so cancel {attached === 1 ? "it" : "them"} under Triggers.</p>}
