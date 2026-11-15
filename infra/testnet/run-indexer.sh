@@ -3,6 +3,7 @@
 #   infra/testnet/run-indexer.sh start|stop|status|reset      (reset = stop, drop and recreate the DB, start: use after a REDEPLOY)
 # The indexer binary has no TLS, so https RPCs go through infra/testnet/rpc-proxy.js (local http forwarder with 429/5xx retry), started and stopped here too.
 # Everything is overridable by env (none of these is a secret except a private RPC URL, which you pass in your shell, never in a file in git):
+#   INDEXER_PROXY_GAP_MS / INDEXER_PROXY_CHUNK (default 100 / 50): for a rate-limited key (e.g. Alchemy free: 10-block eth_getLogs, compute-units-per-second cap) use INDEXER_BATCH=10 INDEXER_HDR_BATCH=5 INDEXER_PROXY_CHUNK=5 INDEXER_PROXY_GAP_MS=300
 #   INDEXER_RPC_URL  (default public https://arbitrum-sepolia-rpc.publicnode.com: the official https://sepolia-rollup.arbitrum.io/rpc answered 429 to most indexer traffic, publicnode took 50-header batches without limiting; pass your own provider URL for fewer rate limits)
 #   DEPLOYMENT       (default contracts/deployments/arbitrumSepolia.json: exchange, startBlock, chainId, market names)
 #   START_BLOCK (default: startBlock from the deployment file)  INDEXER_PORT (18700)  INDEXER_DB (perps_testnet)  INDEXER_BIN  INDEXER_POLL_MS (1000)  INDEXER_BATCH (1000)
@@ -24,7 +25,7 @@ start() {
     if ! { [ -f "$pf" ] && ps -p "$(cat "$pf")" -o command= 2>/dev/null | grep -q rpc-proxy; }; then
       UPSTREAM_RPC_URL="$UPSTREAM" PROXY_PORT="$port" PROXY_MIN_GAP_MS="$gap" PROXY_CHUNK="$chunk" PROXY_CONCURRENCY="${5:-1}" nohup node "$HERE/rpc-proxy.js" > "$HERE/$1.log" 2>&1 < /dev/null & echo $! > "$pf"; sleep 1
     fi; }
-  startproxy rpc-proxy "$PROXY_PORT" 100 50; startproxy rpc-proxy-ui "${UI_PROXY_PORT:-18702}" 50 20 4
+  startproxy rpc-proxy "$PROXY_PORT" "${INDEXER_PROXY_GAP_MS:-100}" "${INDEXER_PROXY_CHUNK:-50}"; startproxy rpc-proxy-ui "${UI_PROXY_PORT:-18702}" 50 20 4
   psql -lqt postgres 2>/dev/null | cut -d'|' -f1 | grep -qw "$DB" || createdb "$DB"
   # Arbitrum Sepolia: ~0.25 s blocks, sequencer-ordered, reorgs are rare and shallow; --reorg-window 600 (= 2.5 min of blocks) is the hash-walk page size;
   # --block-retention 2,000,000 (~6 days of block hashes) bounds how deep a reorg can be anchored. Parent-chain (Ethereum) finality of L2 blocks is NOT tracked: unknown/not handled.
