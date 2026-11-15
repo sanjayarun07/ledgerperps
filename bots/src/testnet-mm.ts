@@ -105,7 +105,7 @@ async function main() {
     const raw = (usd: number) => { const want = (toUsdc(usd) * 10n ** 8n) / px; const lots = (want + cfg.lot - 1n) / cfg.lot; let sz = lots * cfg.lot; while ((sz * px) / 10n ** 8n < cfg.minNotional * 12n / 10n) sz += cfg.lot; return sz; };
     const quote: QuoteConfig = {
       halfSpreadBps: num("HALF_SPREAD_BPS", 25), levels: num("LEVELS", 2), levelStepBps: num("LEVEL_STEP_BPS", 20),
-      levelSize: raw(levelUsd), maxInventory: raw(maxInvUsd), skewBps: num("SKEW_BPS", 10),
+      levelSize: raw(levelUsd), maxInventory: raw(maxInvUsd), skewBps: num("SKEW_BPS", 10), keepMinSize: true,
       refreshBps: num("REFRESH_BPS", 10), maxQuoteAgeMs: num("MAX_QUOTE_AGE_SEC", 300) * 1000,
     };
     takerSizes.set(market, quote.levelSize);

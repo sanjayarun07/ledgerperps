@@ -19,6 +19,8 @@ export interface QuoteConfig {
   levelSize: bigint;
   /** absolute net inventory limit, raw size */
   maxInventory: bigint;
+  /** when true, an inventory-scaled quote that rounds below the market's minimum order is raised to the minimum size (if room allows) instead of being dropped; needed when lots are coarse and levels are only a few lots */
+  keepMinSize?: boolean;
   /** quote shift (bps) when |net inventory| == maxInventory; long => quotes move down */
   skewBps: number;
   /** replace a resting quote when it is further than this from its target (must be < halfSpreadBps) */
@@ -118,6 +120,7 @@ export function computeQuotes(c: QuoteConfig, i: QuoteInput): DesiredQuote[] {
     // ---- bids
     let want = floorTo((c.levelSize * bidScale) / BPS, i.lot);
     want = min(want, floorTo(bidRoom, i.lot));
+    if (c.keepMinSize && bidScale > 0n) { const m = minSizeFor(bid, i); if (want < m && floorTo(bidRoom, i.lot) >= m) want = m; }
     // reduce-only unwinding bids from the ask-set account come first
     const roBid = min(want, floorTo(bidUnwind, i.lot));
     if (roBid >= i.lot) {
@@ -134,6 +137,7 @@ export function computeQuotes(c: QuoteConfig, i: QuoteInput): DesiredQuote[] {
     // ---- asks
     let wantA = floorTo((c.levelSize * askScale) / BPS, i.lot);
     wantA = min(wantA, floorTo(askRoom, i.lot));
+    if (c.keepMinSize && askScale > 0n) { const m = minSizeFor(ask, i); if (wantA < m && floorTo(askRoom, i.lot) >= m) wantA = m; }
     const roAsk = min(wantA, floorTo(askUnwind, i.lot));
     if (roAsk >= i.lot) {
       out.push({ from: "bidSub", isBuy: false, price: ask, size: roAsk, reduceOnly: true, level: l });
@@ -147,6 +151,13 @@ export function computeQuotes(c: QuoteConfig, i: QuoteInput): DesiredQuote[] {
     }
   }
   return out;
+}
+
+/** Smallest lot-aligned size whose notional at `price` reaches the market minimum. */
+function minSizeFor(price: bigint, i: { lot: bigint; minNotional: bigint }): bigint {
+  let sz = i.lot;
+  while (notionalFloor(sz, price) < i.minNotional) sz += i.lot;
+  return sz;
 }
 
 // ---------------------------------------------------------------------------------------------------- diffing

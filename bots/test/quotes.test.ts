@@ -150,3 +150,22 @@ describe("local-dev guard (oracle driver / seed / bots)", () => {
     await expect(assertLocalDev(fake(31337), "https://fork.example.org", "t")).rejects.toThrow(/REFUSING/);
   });
 });
+
+describe("keepMinSize (coarse lots, tiny levels)", () => {
+  // BTC-like: lot 0.0001, min notional 10 USDC, level 0.0002 (~12 USDC), max inventory 0.0006. A short of 0.0002 scales asks to ~67% = 1 lot (~6.5 USDC) => dropped without keepMinSize.
+  const tiny: QuoteConfig = { ...cfg, levels: 1, levelSize: toSize("0.0002"), maxInventory: toSize("0.0006") };
+  const px = toPrice(65000);
+  const inp = { ...base, mid: px, lot: toSize("0.0001"), tick: 100_000n, twoSub: false, netInventory: -toSize("0.0002") };
+  it("drops the ask without the flag (documents the failure mode)", () => {
+    expect(asks(computeQuotes(tiny, inp))).toHaveLength(0);
+  });
+  it("keeps a minimum-size ask with the flag, and never exceeds the inventory room", () => {
+    const q = asks(computeQuotes({ ...tiny, keepMinSize: true }, inp));
+    expect(q).toHaveLength(1);
+    expect(q[0]!.size).toBe(toSize("0.0002")); // 0.0001 BTC is ~6.5 USDC < 10, so two lots
+  });
+  it("still stops quoting a side when inventory is at the limit", () => {
+    const q = computeQuotes({ ...tiny, keepMinSize: true }, { ...inp, netInventory: -toSize("0.0006") });
+    expect(asks(q)).toHaveLength(0);
+  });
+});
