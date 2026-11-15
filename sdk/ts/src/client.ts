@@ -191,7 +191,18 @@ export class PerpClient {
         const est: bigint = await (this.publicClient as any).estimateContractGas({ address, abi, functionName, args, account: w.account });
         gas = (est * 125n) / 100n;
       }
-      const hash: Hex = await (w as any).writeContract({ address, abi, functionName, args, account: w.account, chain: w.chain, gas });
+      // Load-balanced RPCs can answer the nonce lookup from a node that hasn't seen the previous block yet: "nonce too low".
+      // That error means the transaction was REJECTED (nothing was sent), so waiting a moment and re-sending is safe.
+      let hash!: Hex;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          hash = await (w as any).writeContract({ address, abi, functionName, args, account: w.account, chain: w.chain, gas });
+          break;
+        } catch (e) {
+          if (attempt >= 3 || !/nonce (provided for the transaction )?is lower|nonce too low/i.test(String((e as Error)?.message ?? e))) throw e;
+          await new Promise((r) => setTimeout(r, 750 * (attempt + 1)));
+        }
+      }
       const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") throw new Error(`transaction ${hash} reverted on-chain (${functionName})`);
       const logs: any[] = parseEventLogs({ abi: exchangeAbi, logs: receipt.logs.filter((l) => l.address.toLowerCase() === this.exchange.toLowerCase()), strict: false });
@@ -665,8 +676,18 @@ export class PerpClient {
   }
 
   /** Historical Fill events (optionally only those involving `acct` as maker or taker). */
-  async getFills(o: { fromBlock?: bigint; toBlock?: bigint; acct?: Hex } = {}): Promise<FillEvent[]> {
-    const logs = await (this.publicClient as any).getContractEvents({ address: this.exchange, abi: exchangeAbi, eventName: "Fill", fromBlock: o.fromBlock ?? 0n, toBlock: o.toBlock ?? "latest" });
+  async getFills(o: { fromBlock?: bigint; toBlock?: bigint; acct?: Hex; maxRange?: bigint } = {}): Promise<FillEvent[]> {
+    const pc = this.publicClient as any;
+    const get = (fromBlock: bigint, toBlock: bigint | "latest") => pc.getContractEvents({ address: this.exchange, abi: exchangeAbi, eventName: "Fill", fromBlock, toBlock });
+    // Some RPC plans cap eth_getLogs (Alchemy free tier: 10 blocks). Set maxRange (or PERP_LOG_RANGE) to read in windows.
+    const range = o.maxRange ?? (process.env.PERP_LOG_RANGE ? BigInt(process.env.PERP_LOG_RANGE) : 0n);
+    let logs: any[];
+    if (range > 0n) {
+      const from = o.fromBlock ?? 0n;
+      const to = o.toBlock ?? (await this.publicClient.getBlockNumber());
+      logs = [];
+      for (let s = from; s <= to; s += range) logs.push(...(await get(s, s + range - 1n > to ? to : s + range - 1n)));
+    } else logs = await get(o.fromBlock ?? 0n, o.toBlock ?? "latest");
     return logs
       .map((l: any) => ({ ...l.args, market: Number(l.args.market), blockNumber: l.blockNumber, txHash: l.transactionHash }) as FillEvent)
       .filter((f: FillEvent) => !o.acct || f.maker === o.acct || f.taker === o.acct);

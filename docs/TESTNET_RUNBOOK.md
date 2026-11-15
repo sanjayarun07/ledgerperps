@@ -215,3 +215,25 @@ Without the confirm variable, 7 and 8 are read-only dry-runs (plan, gas estimate
 **Watching it.** UI: build the frontend with `node scripts/sync-deployment.mjs arbitrumSepolia` and the testnet env (`infra/testnet/env.testnet.example`); DEMO-USD shows a "DEMO - admin-set price" tag in the market list and a banner on the ticket. While step 8 runs, open the Status popover -> Backstop: inventory vs threshold, auction active, price and discount; the Activity tab shows `BackstopElevated`, `BackstopTaken`. Arbiscan: `https://sepolia.arbiscan.io/address/<exchange>#events` (topics BackstopElevated, BackstopTaken, Liquidated), and the transcript's per-tx links.
 
 **Restoring afterwards.** The demo restores the demo price itself. Switching the feature off again is not scripted: call `setBackstopCfg(market, 0, 0, 0, 0, 0)` from the admin account (softNotional 0 means off).
+
+## 17. Verification pass after deploy #2: TWAP redeploy, live keeper, liquidation and ADL (USER commands; written 2026-11-15)
+
+Goal: turn "unverified" into "verified on testnet" for four things. Run from `contracts/` with `HH="npx hardhat --config hardhat.testnet.config.js"`. Nothing here has been run by an agent; the deploy dry-run (step 1) passed on 2026-11-15 (22 steps, nothing sent, about 0.001 ETH at 0.04 gwei).
+
+| # | What | Command | Broadcasts? |
+|---|---|---|---|
+| 1 | Deploy #3 dry-run (TWAP gas guard) | `$HH run scripts/testnet/deploy-testnet.js --network arbitrumSepolia` | no |
+| 2 | Move funds out of deploy #2 first | `CONFIRM_WITHDRAW=yes $HH run scripts/testnet/withdraw-available.js --network arbitrumSepolia` (deployer sub 0; bot funds and the email wallet are separate, withdraw those in the UI) | yes |
+| 3 | Deploy #3 | `CONFIRM_TESTNET_DEPLOY=yes $HH run scripts/testnet/deploy-testnet.js --network arbitrumSepolia` | yes, ~22 txs |
+| 4 | Smoke, then enable backstop | `CONFIRM_TESTNET_SMOKE=yes $HH run scripts/testnet/smoke-testnet.js ...` then `CONFIRM_ENABLE_BACKSTOP=yes $HH run scripts/testnet/enable-backstop.js ...` | yes |
+| 5 | Point services at the new exchange | `node frontend/scripts/sync-deployment.mjs arbitrumSepolia`, then reset the indexer DB (`./run-indexer.sh reset`) and restart indexer, keeper and bot | no |
+| 6 | Live keeper | create a NEW testnet-only key, fund about 0.01 ETH, then `export KEEPER_PRIVATE_KEY=0x...` in your shell and `KEEPER_LIVE=yes infra/testnet/run-keeper.sh start` (never the deployer key; gas budgets in `keeper.testnet.toml`) | yes (keeper txs) |
+| 7 | TWAP check | place a small TWAP in the UI and watch slices execute; a slice that cannot be estimated should be counted as failed, not stall | yes |
+| 8 | Liquidation on a real feed (BTC-USD) | open a tiny position at maximum leverage from a spare account, then wait for a real move larger than its margin buffer; the live keeper should liquidate it. The price cannot be forced, so this can take hours | yes |
+| 9 | ADL | needs bad debt larger than the insurance fund. A real feed rarely produces that; use the DEMO-USD flow in section 16 (`demo-backstop.js`) to exercise the ADL path with an admin-set price, and record that it was NOT a real feed | yes |
+
+What each step proves, and what it does not:
+* 3 and 7 prove the TWAP fix on a public chain. 6 proves keeper liquidation, ADL and TWAP jobs send real transactions (they have only been simulated or run against local chains).
+* 8 proves liquidation against a Chainlink price on a public chain. It does not prove behaviour in a large price gap or sequencer outage.
+* 9 on DEMO-USD is a controlled test, not a real-feed test.
+* Funding: run `poke-funding.js` with `CONFIRM_POKE_FUNDING=yes` twice, at least 3600 s apart, while a position is open (see the script header).
