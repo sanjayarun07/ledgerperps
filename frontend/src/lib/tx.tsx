@@ -38,6 +38,18 @@ interface Req {
 }
 interface TxCtx { txs: TxEntry[]; send(r: Req): Promise<TxEntry["state"]>; clear(): void; dismiss(id: number): void }
 const Ctx = createContext<TxCtx | null>(null);
+/** Fee caps with headroom on public testnets. Left to the wallet, MetaMask can pick a max fee equal to the current base fee on Arbitrum (0.02 gwei), and the base fee ticks up before the transaction lands ("max fee per gas less than block base fee"). You are charged the real base fee, not the cap. */
+async function feeCaps(): Promise<{ maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint }> {
+  if (IS_LOCAL) return {};
+  try {
+    const f = await publicClient.estimateFeesPerGas();
+    if (!f.maxFeePerGas) return {};
+    const maxFeePerGas = f.maxFeePerGas * 2n;
+    const prio = f.maxPriorityFeePerGas ?? 0n;
+    return { maxFeePerGas, maxPriorityFeePerGas: prio < maxFeePerGas ? prio : maxFeePerGas };
+  } catch { return {}; }
+}
+
 export const useTx = () => { const c = useContext(Ctx); if (!c) throw new Error("TxProvider missing"); return c; };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -115,11 +127,11 @@ export function TxProvider({ children }: { children: ReactNode }) {
       const args = r.prepare ? await r.prepare() : r.args ?? [];
       const req = { address: r.address ?? EXCHANGE, abi: r.abi ?? exchangeAbi, functionName: r.functionName, args, account } as any;
       if (r.transfer) {
-        hash = await client.sendTransaction({ to: r.transfer.to, value: r.transfer.value, chain: client.chain, account: client.account ?? account });
+        hash = await client.sendTransaction({ to: r.transfer.to, value: r.transfer.value, chain: client.chain, account: client.account ?? account, ...(await feeCaps()) });
       } else {
         // Pre-flight simulation: surfaces the decoded custom error before anything is signed. Not a result: just a guard.
         await publicClient.simulateContract(req);
-        hash = await client.writeContract({ ...req, chain: client.chain, account: client.account ?? account });
+        hash = await client.writeContract({ ...req, chain: client.chain, account: client.account ?? account, ...(await feeCaps()) });
       }
     } catch (e) { patch(id, { state: "failed", error: explainError(e, r.ctx) }); return "failed"; }
     patch(id, { state: "submitted", hash });

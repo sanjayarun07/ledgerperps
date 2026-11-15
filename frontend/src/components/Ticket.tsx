@@ -313,7 +313,7 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
       {type === "limit" && tifEff === "GTC" && (
         <div className="field inline"><Label text="Good until" htmlFor="exp" />
           <div className="inp"><select id="exp" value={exp} onChange={(e) => setExp(Number(e.target.value))} title="The order is removed by itself at this time if it has not filled. Cancelled orders are never filled late.">
-            <option value={0}>Cancelled by me</option><option value={3600}>1 hour</option><option value={86400}>24 hours</option><option value={604800}>7 days</option>
+            <option value={0}>No expiry</option><option value={3600}>1 hour</option><option value={86400}>24 hours</option><option value={604800}>7 days</option>
           </select></div>
         </div>
       )}
