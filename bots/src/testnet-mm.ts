@@ -18,6 +18,8 @@ import type { Hex } from "viem";
 import { MarketMakerBot } from "./mm.js";
 import type { QuoteConfig } from "./quotes.js";
 import { sleep, ts } from "./config.js";
+import { HyperliquidVenue } from "./hyperliquid.js";
+import { Hedger, HyperliquidRefVenue, SimulatedVenue, toRaw, type HedgeConfig, type HedgeVenue } from "./hedge.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const KEYFILE = path.resolve(here, "../.env.mm-testnet");
@@ -32,6 +34,16 @@ function loadKey(): Hex {
   if (!k) throw new Error(`no key: run "keygen" first (or export MM_PRIVATE_KEY)`);
   k = k.startsWith("0x") ? k : `0x${k}`;
   if (!/^0x[0-9a-fA-F]{64}$/.test(k)) throw new Error("MM_PRIVATE_KEY is not 32 bytes of hex");
+  return k as Hex;
+}
+
+const HL_KEYFILE = path.resolve(here, "../.env.hl-testnet");
+function loadHlKey(): Hex {
+  let k = process.env.HL_PRIVATE_KEY;
+  if (!k && fs.existsSync(HL_KEYFILE)) k = /^HL_PRIVATE_KEY=(\S+)/m.exec(fs.readFileSync(HL_KEYFILE, "utf8"))?.[1];
+  if (!k) throw new Error(`HEDGE=hl needs a Hyperliquid TESTNET key: export HL_PRIVATE_KEY or create ${HL_KEYFILE}. Use a fresh key; never the deployer or MM key.`);
+  k = k.startsWith("0x") ? k : `0x${k}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(k)) throw new Error("HL_PRIVATE_KEY is not 32 bytes of hex");
   return k as Hex;
 }
 
@@ -95,6 +107,19 @@ async function main() {
 
   const levelUsd = num("LEVEL_NOTIONAL_USD", 12);
   const maxInvUsd = num("MAX_INV_NOTIONAL_USD", 40);
+  // HEDGE=sim: hedge inventory on an in-memory venue priced off Hyperliquid testnet mids (if reachable) else the oracle. HEDGE=ref: only compare prices.
+  // Neither places real orders anywhere: signing Hyperliquid exchange actions is not implemented.
+  const hedgeMode = process.env.HEDGE ?? "off";
+  const hl = new HyperliquidRefVenue();
+  const hedgeSym = (n: string) => n.split("-")[0]!;
+  let venue: HedgeVenue | undefined;
+  if (hedgeMode === "sim") venue = new SimulatedVenue(async (sym) => { try { return await hl.mid(sym); } catch { const m = d.marketIds[`${sym}-USD`]!; return Number(await c.markPrice(m)) / 1e6; } });
+  else if (hedgeMode === "ref") venue = hl;
+  else if (hedgeMode === "hl") venue = new HyperliquidVenue(loadHlKey()); // REAL signed orders on Hyperliquid TESTNET with its own testnet key
+  const hedgeCfg = (cfg: { lot: bigint }): HedgeConfig => ({
+    thresholdRaw: toRaw(num("HEDGE_THRESHOLD_UNITS", 0.0005)), maxClipRaw: toRaw(num("HEDGE_MAX_CLIP_UNITS", 0.01)), minClipRaw: cfg.lot,
+    maxDivergenceBps: num("HEDGE_MAX_DIVERGENCE_BPS", 150), cooldownMs: num("HEDGE_COOLDOWN_SEC", 10) * 1000,
+  });
   const bots: MarketMakerBot[] = [];
   const takerSizes = new Map<number, bigint>();
   for (const n of names) {
@@ -111,6 +136,7 @@ async function main() {
     takerSizes.set(market, quote.levelSize);
     bots.push(new MarketMakerBot(c, {
       name: "tmm", market, marketName: n, quote, bidSub: 0, askSub: 0,
+      hedger: venue ? new Hedger(venue, hedgeSym(n), hedgeCfg(cfg), (m) => console.log(`${ts()} [hedge] ${m}`)) : undefined,
       oracleStaleSec: num("ORACLE_STALE_SEC", 3600), // the contract's own maxAge check is the real gate; Chainlink testnet updates are infrequent
       quoteTtlSec: num("QUOTE_TTL_SEC", 900), minAvailable: toUsdc(num("MIN_AVAILABLE_USD", 2)), tif: Tif.GTC,
     }));

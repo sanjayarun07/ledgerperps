@@ -2,6 +2,7 @@
 import { PerpClient, PerpError, Tif, fromPrice, fromSize, newCloid, notionalFloor, type MarketConfig } from "@perps/sdk";
 import { computeQuotes, planActions, stopReason, type Action, type DesiredQuote, type ExistingQuote, type QuoteConfig, type Side } from "./quotes.js";
 import { ts } from "./config.js";
+import type { Hedger } from "./hedge.js";
 
 export interface BotOptions {
   name: string;
@@ -18,6 +19,8 @@ export interface BotOptions {
   minAvailable: bigint;
   /** GTC (default) or PostOnly (use only once PostOnly orders rest on the deployed contract) */
   tif?: Tif;
+  /** optional hedger: offsets inventory on a hedge venue and pulls quotes if its price disagrees with the oracle */
+  hedger?: Hedger;
   log?: (msg: string) => void;
 }
 
@@ -127,6 +130,10 @@ export class MarketMakerBot {
       const posBid = await pos(o.bidSub);
       const posAsk = this.twoSub ? await pos(o.askSub) : posBid;
       const net = this.twoSub ? posBid + posAsk : posBid;
+      if (o.hedger) {
+        const why = await o.hedger.step(net, Number(mid) / 1e6);
+        if (why) { await this.pullAll(why); return; }
+      }
       const desired = computeQuotes(o.quote, {
         mid, netInventory: net, posBidSub: posBid, posAskSub: posAsk, twoSub: this.twoSub,
         tick: this.cfg.tick, lot: this.cfg.lot, minNotional: this.cfg.minNotional,
