@@ -10,7 +10,8 @@ async function forwardOne(body) {
   try { const j = JSON.parse(body); for (const m of (Array.isArray(j) ? j : [j])) methods[m.method] = (methods[m.method] || 0) + 1; } catch (e) { /* ignore */ }
   for (let i = 0; i < 6; i++) {
     try {
-      const r = await fetch(UP, { method: "POST", headers: { "content-type": "application/json" }, body });
+      // timeout: one upstream call that never answers used to hold the single concurrency slot forever and freeze the indexer, keeper and bot
+      const r = await fetch(UP, { method: "POST", headers: { "content-type": "application/json" }, body, signal: AbortSignal.timeout(Number(process.env.PROXY_UPSTREAM_TIMEOUT_MS || 12000)) });
       if (r.status === 429 || r.status >= 500) { stats.retried++; await sleep(400 * 2 ** i); continue; }
       stats.ok++; return { status: r.status, text: await r.text() };
     } catch (e) { stats.retried++; await sleep(400 * 2 ** i); }

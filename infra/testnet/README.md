@@ -36,3 +36,7 @@ Stop everything: `infra/testnet/run-keeper.sh stop; infra/testnet/run-indexer.sh
 3. Keeper (if running): `run-keeper.sh stop; rm -f infra/testnet/keeper-state.json; run-keeper.sh start` (reads the exchange and start block from the same file).
 4. UI: `cd frontend && npm run sync:testnet`; the dev server picks up the new file (restart `npm run dev:testnet` if the market list changed).
 5. Update `infra/testnet/testnet.config.json` only if parameters changed.
+
+## Forwarder limits and the market-maker bot
+The `:18701` forwarder (indexer + keeper) handles ONE upstream call at a time. A bot on it starves the indexer: run the bot on the browser forwarder instead:
+`MM_RPC_URL=http://127.0.0.1:18702 npm run testnet-mm run` (from `bots/`). `rpc-proxy.js` now times out an upstream call after 12 s (`PROXY_UPSTREAM_TIMEOUT_MS`); before, one call that never answered held the only slot forever and froze the indexer, keeper and bot. If a bot shutdown (Ctrl-C) hangs, `kill -9` it: its quotes expire on their own after `QUOTE_TTL_SEC` (900 s).
