@@ -96,6 +96,11 @@ b, strong { font-weight: 600; }
 /* ---- market bar (56px) ---- */
 .mbar { display: flex; gap: var(--s5); align-items: center; padding: 0 var(--s4); height: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow-x: auto; scrollbar-width: none; }
 .mbar::-webkit-scrollbar { display: none; }
+/* The market bar sits in a column whose width depends on the book and ticket beside it: drop the least important stats by the bar's own width instead of clipping them. */
+.mbar { container-type: inline-size; container-name: mbar; }
+@container mbar (max-width: 860px) { .stat.q-idx { display: none; } }
+@container mbar (max-width: 760px) { .stat.q-oi { display: none; } }
+@container mbar (max-width: 640px) { .stat.q-fund { display: none; } }
 .pair { display: inline-flex; align-items: center; gap: var(--s2); position: relative; font-size: var(--fs-lg); font-weight: 600; flex: none; }
 .pair select { background: transparent; border: 0; font: inherit; font-weight: 600; cursor: pointer; color: var(--text); padding: 0 4px 0 0; min-height: var(--ctl-h); }
 .coin { width: 24px; height: 24px; border-radius: 50%; background: var(--surface4); display: inline-flex; align-items: center; justify-content: center; font-size: var(--fs-s); font-weight: 600; flex: none; }

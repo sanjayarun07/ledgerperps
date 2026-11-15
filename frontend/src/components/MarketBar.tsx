@@ -34,7 +34,7 @@ export default function MarketBar() {
       <label className="pair">
         <span className="coin" aria-hidden>{m.base.slice(0, 1)}</span>
         <select aria-label="Market" value={market} onChange={(e) => setMarket(Number(e.target.value))}>
-          {markets.map((x) => <option key={x.id} value={x.id}>{x.name.replace("-", " / ")}{x.demo ? ` (${DEMO_TAG})` : ""}</option>)}
+          {markets.map((x) => <option key={x.id} value={x.id}>{x.name.replace("-", " / ")}</option>)}
         </select>
       </label>
       <span className="tagpill">Perpetual</span>
@@ -47,10 +47,10 @@ export default function MarketBar() {
         <div className="stat"><small><Tip k="stats24">24h change</Tip></small>
           <b className={`num ${st ? (up ? "long" : "short") : "mute"}`}><Val v={s24.loading ? undefined : st ? <><Tri up={up} />{st.changePct === null ? "-" : `${Math.abs(st.changePct).toFixed(2)}%`}</> : <Why text="24h change needs trade history. Connect the indexer or wait for trades on this market." />} w={70} /></b></div>
         <div className="stat"><small><Tip k="mark">Mark</Tip></small><b className="num"><Val v={mark.data ? fmtPrice(mark.data) : mark.isLoading ? undefined : <Why text="The price feed is stale, so there is no mark price." />} w={80} /></b></div>
-        <div className="stat"><small>Index</small><b className="num"><Val v={index.data ? fmtPrice(index.data) : index.isLoading ? undefined : <Why text="No fresh oracle price for this market right now." />} w={80} /></b></div>
-        <div className="stat"><small><Tip k="funding">Funding / countdown</Tip></small>
+        <div className="stat q-idx"><small>Index</small><b className="num"><Val v={index.data ? fmtPrice(index.data) : index.isLoading ? undefined : <Why text="No fresh oracle price for this market right now." />} w={80} /></b></div>
+        <div className="stat q-fund"><small><Tip k="funding">Funding / countdown</Tip></small>
           <b className="num"><Val v={fund.data ? <>{fmtRatePct(fund.data.rate)} / {due ? "due" : fmtDuration(next - now)}</> : undefined} w={130} /></b></div>
-        <div className="stat"><small>Open interest</small><b className="num"><Val v={info.data ? `${formatFixed(info.data.oi, 8, 3)} ${m.base}` : undefined} w={90} /></b></div>
+        <div className="stat q-oi"><small>Open interest</small><b className="num"><Val v={info.data ? `${formatFixed(info.data.oi, 8, 3)} ${m.base}` : undefined} w={90} /></b></div>
         <div className="stat hide-s"><small>24h volume</small><b className="num"><Val v={s24.loading ? undefined : st ? `${compact(st.volumeQuote)} USDC` : <Why text="24h volume needs trade history, which is not available yet." />} w={80} /></b></div>
         <div className="stat hide-s"><small>Status</small><b><Val v={info.data ? MARKET_STATES[info.data.state] : undefined} /></b></div>
       </div>
