@@ -23,3 +23,5 @@ degraded, or the oracle has not visibly updated for `ORACLE_STALE_SEC` wall-seco
 
 ## Testnet market maker (Arbitrum Sepolia, simulated liquidity)
 `npm run testnet-mm -- keygen | status | setup | run | stop` (see the header of `src/testnet-mm.ts`). Fresh testnet-only key in the git-ignored `bots/.env.mm-testnet`; refuses any chain but 421614 and refuses the deployer key. Tiny sizes (about $12 per level, 2 levels per side, BTC and ETH), quotes around the on-chain oracle mark, one sub-account. Fund it with `contracts/scripts/testnet/fund-mm.js`. It is not a real market maker: no edge, no hedging, test USDC only.
+
+The bot also runs a tiny taker from sub-account 1 (every `TAKER_EVERY_SEC`, default 45; `0` disables): it crosses one resting quote so trades, candles and 24h stats exist. It funds sub 1 from sub 0 (`TAKER_FUND_USDC`, default 6) when needed. Trades against your own quotes cost about the spread on ~$12.

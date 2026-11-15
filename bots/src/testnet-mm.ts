@@ -96,6 +96,7 @@ async function main() {
   const levelUsd = num("LEVEL_NOTIONAL_USD", 12);
   const maxInvUsd = num("MAX_INV_NOTIONAL_USD", 40);
   const bots: MarketMakerBot[] = [];
+  const takerSizes = new Map<number, bigint>();
   for (const n of names) {
     const market = d.marketIds[n]!;
     const cfg = await c.marketConfig(market, true);
@@ -107,6 +108,7 @@ async function main() {
       levelSize: raw(levelUsd), maxInventory: raw(maxInvUsd), skewBps: num("SKEW_BPS", 10),
       refreshBps: num("REFRESH_BPS", 10), maxQuoteAgeMs: num("MAX_QUOTE_AGE_SEC", 300) * 1000,
     };
+    takerSizes.set(market, quote.levelSize);
     bots.push(new MarketMakerBot(c, {
       name: "tmm", market, marketName: n, quote, bidSub: 0, askSub: 0,
       oracleStaleSec: num("ORACLE_STALE_SEC", 3600), // the contract's own maxAge check is the real gate; Chainlink testnet updates are infrequent
@@ -119,9 +121,24 @@ async function main() {
   process.once("SIGTERM", () => (stop = true));
   const interval = num("INTERVAL_MS", 20_000);
   let last = 0;
+  // Small taker (sub-account 1): every TAKER_EVERY_SEC it crosses ONE resting quote (IOC, one level) so the chart, trade history and 24h stats have real trades. 0 disables it.
+  const takerEvery = num("TAKER_EVERY_SEC", 45) * 1000; let lastTake = Date.now(), takeN = 0;
+  const TAKER_SUB = 1;
+  async function takerTick() {
+    const ids = [...takerSizes.keys()]; const market = ids[takeN % ids.length]!; const isBuy = Math.floor(takeN / ids.length) % 2 === 0; takeN++;
+    try {
+      if ((await c.accountState(TAKER_SUB)).available < toUsdc(3)) { const amt = toUsdc(num("TAKER_FUND_USDC", 6)); if ((await c.accountState(0)).available > amt + toUsdc(8)) await c.transferInternal(0, TAKER_SUB, amt); else return console.log(`${ts()} [taker] skipped: not enough free collateral to fund sub ${TAKER_SUB}`); }
+      const top = await c.bestPrice(market, !isBuy); if (top === 0n) return;
+      const cfg = await c.marketConfig(market, true);
+      const px = isBuy ? top + cfg.tick : top - cfg.tick;
+      const r = await c.placeOrder({ market, isBuy, price: px, size: takerSizes.get(market)!, tif: Tif.IOC, reduceOnly: false, cloid: 0n, expiry: 0n }, { sub: TAKER_SUB });
+      console.log(`${ts()} [taker] ${isBuy ? "buy" : "sell"} market ${market} @ ${fromPrice(px)} (best ${fromPrice(top)}) order ${r.orderId}`);
+    } catch (e) { console.log(`${ts()} [taker] skipped: ${String((e as Error).message).split("\n")[0]}`); }
+  }
   while (!stop) {
     const t0 = Date.now();
     for (const b of bots) await b.tick(); // sequential: one key, one nonce
+    if (takerEvery > 0 && Date.now() - lastTake >= takerEvery) { lastTake = Date.now(); await takerTick(); }
     if (Date.now() - last > 60_000) { last = Date.now(); for (const b of bots) console.log(`${ts()} SUMMARY ${b.summary()}`); }
     await sleep(Math.max(0, interval - (Date.now() - t0)));
   }
