@@ -2,10 +2,10 @@
 import { useMemo, useState } from "react";
 import { contrast } from "@/brand/color";
 import { logoSrc } from "@/components/BrandBits";
-import { BASE_BANNER, FONTS, NEUTRALS, RADII, DENSITIES, safeParseBrand, type BrandConfig } from "@/brand/schema";
+import { disclaimerText, FONTS, NEUTRALS, RADII, DENSITIES, safeParseBrand, type BrandConfig } from "@/brand/schema";
 import { deriveTheme } from "@/brand/theme";
 import { visibleMarkets } from "@/brand/gate";
-import { MARKETS } from "@/lib/config";
+import { MARKETS, NETWORK } from "@/lib/config";
 
 const FLAG_LABELS: Record<string, string> = { twap: "TWAP orders", conditionals: "Take-profit / stop-loss and triggers", isolatedMargin: "Isolated margin", signedRelay: "Signed orders / relayer", agentKeys: "Session keys", subaccounts: "Subaccounts", tour: "Welcome card and tour", advancedTab: "Advanced order tab", commandPalette: "Command palette (Ctrl/Cmd+K)", leaderboard: "Leaderboard (reserved, no page yet)", explore: "Explore (reserved, no page yet)", studio: "Brand Studio route" };
 const MAX_LOGO = 100_000;
@@ -90,7 +90,7 @@ export default function BrandStudio({ initial }: { initial: BrandConfig }) {
           {check.ok && t.warnings.length === 0 && <p className="hint">No contrast warnings.</p>}
         </div>
         <div className="preview-frame" style={{ ...(vars as React.CSSProperties), background: "var(--bg)", color: "var(--text)", border: "1px solid var(--line)", borderRadius: valid.radius === "sharp" ? 2 : valid.radius === "round" ? 14 : 8, overflow: "hidden", fontFamily: "var(--font)" }}>
-          <div className="demo" style={{ background: theme === "dark" ? "#2a2208" : "#1d2b44", color: theme === "dark" ? "#ffd870" : "#ffe8a8" }}>{valid.disclaimer.extra ? `${BASE_BANNER}. ${valid.disclaimer.extra}` : BASE_BANNER}</div>
+          <div className="demo" style={{ background: theme === "dark" ? "#2a2208" : "#1d2b44", color: theme === "dark" ? "#ffd870" : "#ffe8a8" }}>{disclaimerText(valid, false, NETWORK)}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 16px", background: "var(--surface)", borderBottom: "1px solid var(--line)" }}>
             <b style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {valid.logo
