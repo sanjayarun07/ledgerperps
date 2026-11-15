@@ -118,6 +118,9 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
   const refPx0 = type === "limit" ? parseDecimal(price, 6) ?? mark : top ?? mark;
   const sizeBase = unit === "base" ? sizeIn : (() => { const q = parseDecimal(sizeIn, 6); const b = q && info ? quoteToBase(q, refPx0, info.lot) : null; return b ? formatFixed(b, 8) : ""; })();
   const size = sizeBase;
+  // USDC entry that rounds to less than one lot has no base size yet: say so (the minimum order), not "enter a size" for a box that has a number in it.
+  const belowLot = unit === "quote" && sizeIn.trim() !== "" && size === "";
+  const minOrderTxt = info ? `${formatFixed(info.minNotional, 6, 0, 2)} USDC` : "the minimum";
   const v = useMemo(() => info ? validateTicket({ type, isBuy, priceStr: price, sizeStr: size, tif: tifEff, reduceOnly: roEff, slippageBps: slip, refPrice: mark, bookTop: top, position: pos?.size ?? 0n }, { ...info, unit: base }) : null, [info, type, isBuy, price, size, tifEff, roEff, slip, mark, top, pos, base]);
   const touched = sizeTouched(sizeIn);
   const maxLev = info?.tiers[0] ? maxLeverageFromImr(info.tiers[0].imrBps) : 0;
@@ -164,7 +167,7 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
   // ---- checks ----
   const checks: Check[] = [];
   if (v) {
-    if (touched) for (const e of v.errors) checks.push({ kind: "fail", text: e });
+    if (touched) for (const e of v.errors) checks.push({ kind: "fail", text: belowLot && e.startsWith("Enter a size") ? `Order is too small: the minimum is ${minOrderTxt}` : e });
   }
   const rules = allowedActions({ state: ms?.state ?? 0, globalPaused: sys?.globalPaused, oracleOk: ms?.oracleOk, name, oracle: MARKETS[market]?.oracle });
   const reducing = (isBuy && cur < 0n) || (!isBuy && cur > 0n);
@@ -258,11 +261,11 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
         <Row label="Current position">{pos ? `${fmtSize(pos.size)} ${base}` : `0 ${base}`}</Row>
       </div>
       {type === "limit" && (
-        <Field id="px" label="Limit price" tip="limit" value={price} onChange={setPrice} suffix="USDC" ph={mark ? formatFixed(mark, 6, 1, 1) : ""} error={touched && !!v && v.price === undefined}
-          help={info ? `Steps of ${formatFixed(info.tick, 6)} USDC. Click a book price to fill it in.` : undefined} />
+        <Field id="px" label="Limit price" tip="limit" value={price} onChange={setPrice} suffix="USDC" ph={mark ? formatFixed(mark, 6, 1, 1) : ""} error={touched && !!v && v.price === undefined && price.trim() !== ""}
+          help={info ? (price.trim() === "" ? "Enter a price, or click a book price to fill it in." : `Steps of ${formatFixed(info.tick, 6)} USDC. Click a book price to fill it in.`) : undefined} />
       )}
-      <Field id="sz" label="Position size" value={sizeIn} onChange={(x) => { setSizeIn(x); setPct(0); }} suffix={<span className="seg" role="group" aria-label="Size unit"><button type="button" aria-pressed={unit === "base"} className={unit === "base" ? "on" : ""} onClick={() => { setUnit("base"); setSizeIn(size); }}>{base}</button><button type="button" aria-pressed={unit === "quote"} className={unit === "quote" ? "on" : ""} onClick={() => { setUnit("quote"); setSizeIn(v?.notional ? formatFixed(v.notional, 6, 2, 2) : ""); }}>USDC</button></span>} ph={unit === "base" ? "0.0010" : "100"} error={touched && !!v && v.size === undefined}
-        help={info ? `Steps of ${formatFixed(info.lot, 8)} ${base}. Your position: ${pos ? fmtSize(pos.size) : "0"} ${base}.${unit === "quote" && size ? ` = ${size} ${base}` : ""}` : undefined} />
+      <Field id="sz" label="Position size" value={sizeIn} onChange={(x) => { setSizeIn(x); setPct(0); }} suffix={<span className="seg" role="group" aria-label="Size unit"><button type="button" aria-pressed={unit === "base"} className={unit === "base" ? "on" : ""} onClick={() => { setUnit("base"); setSizeIn(size); }}>{base}</button><button type="button" aria-pressed={unit === "quote"} className={unit === "quote" ? "on" : ""} onClick={() => { setUnit("quote"); setSizeIn(v?.notional ? formatFixed(v.notional, 6, 2, 2) : ""); }}>USDC</button></span>} ph={unit === "base" ? "0.0010" : "100"} error={touched && !!v && (v.size === undefined || belowLot)}
+        help={info ? (belowLot ? `Too small: the minimum order is ${minOrderTxt}.` : `Minimum order ${minOrderTxt}; steps of ${formatFixed(info.lot, 8)} ${base}.${unit === "quote" && size ? ` = ${size} ${base}` : ""}`) : undefined} />
       <div className="slider">
         <label htmlFor="pct" className="sr">{`Size as percent of available margin at ${levSel}x`}</label>
         <input id="pct" type="range" min={0} max={100} step={1} value={pct} disabled={!acct || (acct && free <= 0n && !ro2)} aria-valuetext={`${pct} percent of available margin`} onChange={(e) => setFromPct(Number(e.target.value))} />
