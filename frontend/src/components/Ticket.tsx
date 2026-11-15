@@ -75,7 +75,7 @@ function Popover({ label, children, chip }: { label: string; chip: string; child
 type AdvKind = "limit" | "trigger" | "bracket" | "twap" | "scale";
 
 export default function Ticket() {
-  const { name, isBuy, otab } = useApp();
+  const { name, isBuy, otab, setOtab } = useApp();
   const { ticket } = useBrand();
   const adv = ticket.advancedTab;
   const tab = otab === "advanced" && !adv ? "limit" : otab;
@@ -92,6 +92,11 @@ export default function Ticket() {
   return (
     <div className={`panel ticket ${isBuy ? "side-buy" : "side-sell"}`} id="ticket" aria-labelledby="ticket-h">
       <h3 id="ticket-h" className="sr">Trade {name}</h3>
+      {tab === "advanced" && cur.id !== "limit" && (
+        <div className="seg wide" role="tablist" aria-label="Order type">
+          {(["market", "limit", "advanced"] as const).map((t) => <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setOtab(t as OrderTab)}>{t === "market" ? "Market" : t === "limit" ? "Limit" : "Advanced"}</button>)}
+        </div>
+      )}
       {tab === "advanced" && (
         <div className="field advkind"><Label text="Advanced order type" htmlFor="advkind" />
           <div className="inp"><select id="advkind" value={cur.id} onChange={(e) => setKind(e.target.value as AdvKind)}>{avail.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}</select></div>
