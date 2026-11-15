@@ -113,3 +113,12 @@ Source fix (`PerpTwap.sol`, 100 Hardhat / 26 Foundry tests pass): (1) a slice wi
 
 ## TP/SL orders outlive the position
 Closing a position does not cancel its reduce-only TP/SL conditionals, and cancelling one leg does not cancel its linked sibling. They are harmless (reduce-only, nothing to reduce) but clutter the Triggers tab and count toward order limits. The close dialog now warns; no auto-cancel on close.
+
+## Email sign-in (Privy) with MFA: code added, not exercised
+`frontend/src/lib/privy.tsx` adds "Sign in with email" (embedded wallet) when `NEXT_PUBLIC_PRIVY_APP_ID` is set; the wallet menu offers "Turn on two-step verification" (Privy's enrollment dialog; MFA itself is configured in the Privy dashboard). Typecheck, lint and 372 unit tests pass. NOT tested against a real Privy app (no app id yet): login, embedded-wallet signing on Arbitrum Sepolia, MFA prompt on sign, and session-key/subaccount flows through that wallet are unverified. The email wallet is a new address and needs testnet ETH and USDC.
+- 'Hedged market-maker bot' (bots/src/hedge.ts): simulated hedge venue only; no real venue orders; not run live (bot out of gas).
+- Real Hyperliquid testnet hedge (bots/src/hyperliquid.ts, HEDGE=hl): signing/wire format unit-tested only; no live order sent (needs a funded testnet key run by the operator). Hyperliquid fills/margin are not reconciled with Ledgerline PnL.
+
+## Builder onboarding (/builder): UI only
+`frontend/src/app/builder` is a five-step checklist (profile signed with the wallet, brand export, fee planner, payout address, launch checklist) modelled on Orderly One's builder flow. State lives in this browser's localStorage only. There is NO builder fee, broker ID, fee sharing, payout or setup fee in the contracts: the exchange has one global taker/maker fee, so the fee and revenue steps are planning aids, not enforcement. The signed ownership message is not verified by any server. Checked by hand in Chrome on testnet (sign, on-chain fee read, fee calculator); steps 2, 4, 5 not clicked through. Adding Privy also required stubbing its optional Solana packages in next.config.mjs (they broke the whole dev server until then).
+- UI/UX Pro Max skill installed into /Users/arunmozhi/Perps/.claude/skills (7 folders, via npx ui-ux-pro-max-cli init --ai claude; no postinstall script; project-local). Remove with: npx ui-ux-pro-max-cli uninstall --ai claude
