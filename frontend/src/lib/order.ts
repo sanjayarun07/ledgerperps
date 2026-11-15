@@ -150,3 +150,72 @@ export function sizeForLeverage(a: { leverage: number; equity: bigint; price: bi
   const n = ((delta < 0n ? -delta : delta) / a.lot) * a.lot;
   return n > 0n ? n : null;
 }
+
+// ---------------------------------------------------------------- advanced order types
+
+export type TriggerKind = "stop" | "tp";
+/** Direction the price must cross for a trigger order to fire: a stop BUY fires when price RISES to it, a stop SELL when it FALLS; take-profit is the reverse. */
+export const triggerAbove = (kind: TriggerKind, isBuy: boolean): boolean => (kind === "stop" ? isBuy : !isBuy);
+
+export function validateTrigger(a: { kind: TriggerKind; isBuy: boolean; exec: "market" | "limit"; triggerStr: string; limitStr: string; sizeStr: string; mark: bigint; position: bigint; reduceOnly: boolean; slippageBps: number }, r: MarketRules): { ok: boolean; errors: string[]; warnings: string[]; trigger?: bigint; limit?: bigint; size?: bigint; above: boolean } {
+  const errors: string[] = [], warnings: string[] = [];
+  const above = triggerAbove(a.kind, a.isBuy);
+  const trigger = parseDecimal(a.triggerStr, PRICE_DEC) ?? undefined;
+  if (!trigger) errors.push(a.triggerStr.trim() === "" ? "Enter a trigger price in USDC" : "Trigger must be a positive number with at most 6 decimals");
+  else {
+    if (trigger % r.tick !== 0n) errors.push(`Trigger must be a multiple of the tick (${px6(r.tick)} USDC); try ${px6(suggestPrice(trigger, r.tick))}`);
+    if (a.mark > 0n && (above ? trigger <= a.mark : trigger >= a.mark)) errors.push(`${a.kind === "stop" ? "Stop" : "Take-profit"} ${a.isBuy ? "buy" : "sell"} fires when the price ${above ? "rises to" : "falls to"} the trigger, so it must be ${above ? "above" : "below"} the mark (${px6(a.mark)} USDC)`);
+  }
+  let limit: bigint | undefined;
+  if (a.exec === "limit") {
+    limit = parseDecimal(a.limitStr, PRICE_DEC) ?? undefined;
+    if (!limit) errors.push(a.limitStr.trim() === "" ? "Enter a limit price in USDC" : "Limit price must be a positive number with at most 6 decimals");
+    else if (limit % r.tick !== 0n) errors.push(`Limit price must be a multiple of the tick (${px6(r.tick)} USDC); try ${px6(suggestPrice(limit, r.tick))}`);
+    else if (trigger && (a.isBuy ? limit < trigger : limit > trigger)) warnings.push(`A ${a.isBuy ? "buy" : "sell"} limit ${a.isBuy ? "below" : "above"} the trigger may never fill once triggered`);
+  } else if (trigger) limit = slippagePrice(trigger, a.isBuy, a.slippageBps, r.tick);
+  const size = parseDecimal(a.sizeStr, SIZE_DEC) ?? undefined;
+  if (!size) errors.push(a.sizeStr.trim() === "" ? "Enter a size" : "Size must be a positive number with at most 8 decimals");
+  else {
+    if (size % r.lot !== 0n) errors.push(`Size must be a multiple of the lot (${sz8(r.lot)}${r.unit ? ` ${r.unit}` : ""}); try ${sz8(suggestSize(size, r.lot))}`);
+    if (size > r.maxOrderSize) errors.push(`Size is above the max order size (${sz8(r.maxOrderSize)})`);
+    if (!a.reduceOnly && trigger && (limit ?? trigger) > 0n && notionalFloor(size, limit ?? trigger) < r.minNotional) errors.push(`Order value is below the minimum notional (${usd6(r.minNotional)} USDC)`);
+  }
+  if (a.reduceOnly && size) {
+    if (a.position === 0n) warnings.push("Reduce-only with no open position: it will be rejected when it fires unless you open one first");
+    else if ((a.position > 0n) === a.isBuy) errors.push(`Reduce-only must be on the opposite side of your position (you are ${a.position > 0n ? "long, so choose Sell" : "short, so choose Buy"})`);
+    else if (size > abs(a.position)) warnings.push(`Size is bigger than your position (${sz8(abs(a.position))}); a reduce-only order is capped at the position`);
+  }
+  return { ok: errors.length === 0, errors, warnings, trigger, limit, size, above };
+}
+
+/** Scale order: `n` equal-ish limit orders spread evenly from `from` to `to` (inclusive), each on the tick grid, sizes on the lot grid summing to `total`. */
+export function scaleLevels(a: { from: bigint; to: bigint; total: bigint; n: number; tick: bigint; lot: bigint }): { prices: bigint[]; sizes: bigint[] } {
+  const { from, to, total, n, tick, lot } = a;
+  const prices: bigint[] = [];
+  for (let i = 0; i < n; i++) {
+    const raw = n === 1 ? from : from + ((to - from) * BigInt(i)) / BigInt(n - 1);
+    prices.push(((raw + tick / 2n) / tick) * tick);
+  }
+  const lots = total / lot, base = lots / BigInt(n), extra = lots % BigInt(n);
+  const sizes = prices.map((_, i) => (base + (BigInt(i) < extra ? 1n : 0n)) * lot);
+  return { prices, sizes };
+}
+
+export function validateScale(a: { isBuy: boolean; fromStr: string; toStr: string; sizeStr: string; n: number; reduceOnly: boolean; mark: bigint }, r: MarketRules): { ok: boolean; errors: string[]; warnings: string[]; prices: bigint[]; sizes: bigint[] } {
+  const errors: string[] = [], warnings: string[] = [];
+  const from = parseDecimal(a.fromStr, PRICE_DEC), to = parseDecimal(a.toStr, PRICE_DEC), total = parseDecimal(a.sizeStr, SIZE_DEC);
+  if (!from) errors.push("Enter the start price in USDC");
+  if (!to) errors.push("Enter the end price in USDC");
+  if (!total) errors.push("Enter a total size");
+  if (!Number.isInteger(a.n) || a.n < 2 || a.n > 10) errors.push("Orders must be a whole number from 2 to 10");
+  if (!from || !to || !total || errors.length) return { ok: false, errors, warnings, prices: [], sizes: [] };
+  if (from === to) errors.push("Start and end price must differ");
+  if (total % r.lot !== 0n) errors.push(`Total size must be a multiple of the lot (${sz8(r.lot)}); try ${sz8(suggestSize(total, r.lot))}`);
+  else if (total / r.lot < BigInt(a.n)) errors.push(`Each order must be at least one lot (${sz8(r.lot)}): lower the number of orders or raise the size`);
+  if (errors.length) return { ok: false, errors, warnings, prices: [], sizes: [] };
+  const { prices, sizes } = scaleLevels({ from, to, total, n: a.n, tick: r.tick, lot: r.lot });
+  if (new Set(prices.map(String)).size !== prices.length) errors.push("Prices collapse onto the same tick: widen the range or use fewer orders");
+  if (!a.reduceOnly) { const small = prices.findIndex((p, i) => notionalFloor(sizes[i]!, p) < r.minNotional); if (small >= 0) errors.push(`Order ${small + 1} is below the minimum notional (${usd6(r.minNotional)} USDC): use fewer orders or a larger size`); }
+  if (a.mark > 0n) { const cross = prices.filter((p) => (a.isBuy ? p >= a.mark : p <= a.mark)).length; if (cross > 0) warnings.push(`${cross} of ${a.n} orders ${a.isBuy ? "are at or above" : "are at or below"} the mark and may fill immediately as takers`); }
+  return { ok: errors.length === 0, errors, warnings, prices, sizes };
+}

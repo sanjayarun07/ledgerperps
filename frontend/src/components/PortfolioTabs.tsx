@@ -29,10 +29,11 @@ export default function PortfolioTabs() {
   const nCond = (useConditionals(w.acct).data ?? []).length;
   const counts: Partial<Record<DockTab, number>> = { Positions: nPos, "Open orders": nOrd, TWAPs: nTw, Conditionals: nCond };
   const cur = dockTabs.includes(tab) ? tab : "Positions";
-  const PRIMARY: DockTab[] = ["Balances", "Positions", "Open orders", "Trades", "Funding", "Order history"];
+  const PRIMARY: DockTab[] = ["Balances", "Positions", "Open orders", "Conditionals", "TWAPs", "Trades", "Funding", "Order history"];
   const main = PRIMARY.filter((t) => dockTabs.includes(t));
   const more = dockTabs.filter((t) => !PRIMARY.includes(t));
-  const label = (t: DockTab) => (t === "Trades" ? "Trade history" : t === "Funding" ? "Funding history" : t);
+  const label = (t: DockTab) => (t === "Trades" ? "Trade history" : t === "Funding" ? "Funding history" : t === "Conditionals" ? "Triggers" : t === "TWAPs" ? "TWAPs" : t);
+  const { send } = useTx();
   const [menu, setMenu] = useState(false);
   return (
     <div className="panel dock" id="section-portfolio">
@@ -44,6 +45,9 @@ export default function PortfolioTabs() {
             {menu && <div className="menu up" role="menu">{more.map((t) => <button key={t} role="menuitem" data-portfolio-tab={t} className="menu-item" onClick={() => { setTab(t); setMenu(false); }}>{label(t)}{counts[t] !== undefined && w.address ? <span className="count">{counts[t]}</span> : null}</button>)}</div>}
           </span>
         )}
+        <span className="popwrap more dock-actions" style={{ marginLeft: "auto" }}>
+          <button type="button" className="btn sm danger" disabled={!w.address || nOrd === 0} title="Cancel every open limit order on this sub-account" onClick={() => send({ label: `Cancel all orders (subaccount ${w.sub})`, kind: "cancel", functionName: "cancelAll", args: [w.address, w.sub], trading: true })}>Cancel all orders</button>
+        </span>
       </div>
       <div className="dockbody">
       {!w.address ? <Empty title="Nothing to show yet" body="Connect a wallet and your positions, orders and history will appear here." action={<button className="btn link" onClick={() => document.getElementById("connect-btn")?.click()}>Connect wallet</button>} /> : (

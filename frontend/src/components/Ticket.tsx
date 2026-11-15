@@ -6,7 +6,7 @@ import { useApp, type OrderTab } from "@/lib/app";
 import { publicClient } from "@/lib/client";
 import { CHAIN_ID, DEMO_BANNER, DEMO_TAG, EXCHANGE, exchangeAbi, IS_LOCAL, MARKETS, NETWORK } from "@/lib/config";
 import { switchLabel } from "@/lib/network";
-import { buildOrderParams, slippagePrice, suggestSize, validateBracket, validateTicket, validateTwap, type TifName } from "@/lib/order";
+import { buildOrderParams, slippagePrice, suggestSize, validateBracket, validateScale, validateTicket, validateTrigger, validateTwap, type TifName, type TriggerKind } from "@/lib/order";
 import { quoteToBase, sizeFromPercent } from "@/lib/terminal";
 import { allowedActions, canPlace } from "@/lib/marketRules";
 import { impactBps, ticketAmounts, walkBook } from "@/lib/ticketMath";
@@ -18,7 +18,7 @@ import { useTx } from "@/lib/tx";
 import { abs, fmtPrice, fmtSigned, fmtSize, fmtUsd, formatFixed, notionalCeil, notionalFloor, parseDecimal, shortAddr } from "@/lib/units";
 import { useWallet } from "@/lib/wallet";
 import { focusTarget } from "@/lib/focus";
-import { Advanced, Field, Label, Row, Tip } from "@/components/ui";
+import { Field, Label, Row, Tip } from "@/components/ui";
 import { Icon, Tri } from "@/components/Icon";
 
 function useCtx() {
@@ -72,17 +72,37 @@ function Popover({ label, children, chip }: { label: string; chip: string; child
   );
 }
 
+type AdvKind = "limit" | "trigger" | "bracket" | "twap" | "scale";
+
 export default function Ticket() {
   const { name, isBuy, otab } = useApp();
   const { ticket } = useBrand();
   const adv = ticket.advancedTab;
   const tab = otab === "advanced" && !adv ? "limit" : otab;
+  const [kind, setKind] = useState<AdvKind>("limit");
+  const kinds: { id: AdvKind; label: string; hint: string; on: boolean }[] = [
+    { id: "limit", label: "Limit (all options)", hint: "time in force, post-only, reduce-only, expiry, signed", on: true },
+    { id: "trigger", label: "Stop / Take-profit", hint: "fires when the price reaches a trigger", on: ticket.tpsl },
+    { id: "bracket", label: "TP/SL on position", hint: "take-profit and stop-loss for an open position", on: ticket.tpsl },
+    { id: "twap", label: "TWAP", hint: "split a big order over time", on: ticket.twap },
+    { id: "scale", label: "Scale", hint: "several limit orders across a price range", on: true },
+  ];
+  const avail = kinds.filter((k) => k.on);
+  const cur = avail.find((k) => k.id === kind) ?? avail[0]!;
   return (
     <div className={`panel ticket ${isBuy ? "side-buy" : "side-sell"}`} id="ticket" aria-labelledby="ticket-h">
       <h3 id="ticket-h" className="sr">Trade {name}</h3>
-      <OrderForm tab={tab} />
-      {tab === "advanced" && ticket.tpsl && <Advanced title="Take-profit / stop-loss on an existing position" hint="protect a position"><TpSl /></Advanced>}
-      {tab === "advanced" && ticket.twap && <Advanced title="Split a big order over time (TWAP)" hint="advanced"><Twap /></Advanced>}
+      {tab === "advanced" && (
+        <div className="field advkind"><Label text="Advanced order type" htmlFor="advkind" />
+          <div className="inp"><select id="advkind" value={cur.id} onChange={(e) => setKind(e.target.value as AdvKind)}>{avail.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}</select></div>
+          <div className="hint">{cur.hint}</div>
+        </div>
+      )}
+      {(tab !== "advanced" || cur.id === "limit") && <OrderForm tab={tab} />}
+      {tab === "advanced" && cur.id === "trigger" && <TriggerOrder />}
+      {tab === "advanced" && cur.id === "bracket" && <TpSl bracketOnly />}
+      {tab === "advanced" && cur.id === "twap" && <Twap />}
+      {tab === "advanced" && cur.id === "scale" && <Scale />}
     </div>
   );
 }
@@ -99,6 +119,7 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
   const [levSel, setLevSel] = useState(1);
   const [tif, setTif] = useState<TifName>("GTC");
   const [post, setPost] = useState(false);
+  const [exp, setExp] = useState(0);
   const [ro, setRo] = useState(false);
   const [slip, setSlip] = useState(50);
   const [ack, setAck] = useState(false);
@@ -112,7 +133,7 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
   useEffect(() => { setPrice(""); setAck(false); setPct(0); setSizeIn(""); setTp(""); setSl(""); setWithTpsl(false); }, [market]);
   const advOpts = tab === "advanced"; // time-in-force / post-only / reduce-only live on the Advanced tab
   const tifEff: TifName = type === "limit" && post ? "PostOnly" : type === "limit" ? tif : "GTC";
-  const roEff = advOpts && ro;
+  const roEff = ro;
 
   const top = isBuy ? book?.asks.px[0] : book?.bids.px[0];
   const refPx0 = type === "limit" ? parseDecimal(price, 6) ?? mark : top ?? mark;
@@ -204,7 +225,7 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
 
   const submit = () => {
     if (!v?.size || !v.price || !w.address) return;
-    const p = buildOrderParams({ market, isBuy, price: v.price, size: v.size, type, tif: tifEff, reduceOnly: roEff });
+    const p = buildOrderParams({ market, isBuy, price: v.price, size: v.size, type, tif: tifEff, reduceOnly: roEff, expiry: type === "limit" && tifEff === "GTC" && exp > 0 ? BigInt(clock.now + exp) : 0n });
     const desc = `${type === "market" ? "Market" : tifEff === "GTC" ? "Limit" : tifEff === "PostOnly" ? "Post-only limit" : `${tifEff} limit`} ${isBuy ? "buy" : "sell"} ${fmtSize(v.size)} ${base}`;
     const ctx = { shortfall: shortfall > 0n ? shortfall : margin !== null && fee !== null ? margin + fee : undefined, fmtUsd, market: name };
     const afterOk = (st: string) => {
@@ -289,16 +310,23 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
         </div>
       )}
 
-      {advOpts && (
-        <div className="advbox">
-          <label className="check"><input type="checkbox" checked={ro} onChange={(e) => setRo(e.target.checked)} /><Tip k="reduceonly">Reduce-only</Tip></label>
+      {type === "limit" && tifEff === "GTC" && (
+        <div className="field inline"><Label text="Good until" htmlFor="exp" />
+          <div className="inp"><select id="exp" value={exp} onChange={(e) => setExp(Number(e.target.value))} title="The order is removed by itself at this time if it has not filled. Cancelled orders are never filled late.">
+            <option value={0}>Cancelled by me</option><option value={3600}>1 hour</option><option value={86400}>24 hours</option><option value={604800}>7 days</option>
+          </select></div>
+        </div>
+      )}
+      <div className="advbox">
+        <label className="check"><input type="checkbox" checked={ro} onChange={(e) => setRo(e.target.checked)} /><Tip k="reduceonly">Reduce-only</Tip></label>
+        {advOpts && (<>
           {IS_LOCAL && ticket.signedRelay && w.relayerAccount && (
             <label className="check">
               <input type="checkbox" checked={w.useRelayer} onChange={(e) => w.setUseRelayer(e.target.checked)} /><Tip k="signed">Signed order</Tip>: sign here, another account ({shortAddr(w.relayerAccount.address)}) sends it
             </label>
           )}
-        </div>
-      )}
+        </>)}
+      </div>
 
       {ticket.tpsl && (
         <div className="tpsl">
@@ -351,11 +379,11 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
   );
 }
 
-function TpSl() {
+function TpSl({ bracketOnly = false }: { bracketOnly?: boolean } = {}) {
   const { market, base, w, info, mark, pos } = useCtx();
   const { send } = useTx();
   const blocked = useBlockedReason();
-  const [mode, setMode] = useState<"bracket" | "single">("bracket");
+  const [modeS, setMode] = useState<"bracket" | "single">("bracket"); const mode = bracketOnly ? "bracket" : modeS;
   const [tp, setTp] = useState(""); const [sl, setSl] = useState(""); const [size, setSize] = useState("");
   const [slip, setSlip] = useState(100);
   const [isBuy, setIsBuy] = useState(false); const [above, setAbove] = useState(true); const [trig, setTrig] = useState(""); const [ro, setRo] = useState(true);
@@ -400,12 +428,12 @@ function TpSl() {
 
   return (
     <>
-      <div className="field"><Label text="Kind" tip="tpsl" />
+      {!bracketOnly && <div className="field"><Label text="Kind" tip="tpsl" />
         <div className="seg" role="group" aria-label="Kind of trigger order">
           <button type="button" className={mode === "bracket" ? "on" : ""} aria-pressed={mode === "bracket"} onClick={() => setMode("bracket")}>Take-profit + stop-loss</button>
           <button type="button" className={mode === "single" ? "on" : ""} aria-pressed={mode === "single"} onClick={() => setMode("single")}>Single trigger</button>
         </div>
-      </div>
+      </div>}
       {mode === "bracket" ? (
         <>
           <p className="hint">Position: {pos ? fmtSize(pos.size) : "0"} {base}. Current price {mark ? px(mark) : "-"} USDC. When one of the two fires, the other is cancelled.</p>
@@ -458,6 +486,106 @@ function Twap() {
       <p className="hint">Each slice runs when due (a keeper, or the Run slice button under Open orders).</p>
       {size && v && v.errors.length > 0 && <ul className="errs">{v.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
       <button className="btn full brand" disabled={!!blocked || !v?.ok} onClick={submit}>{blocked ?? "Start TWAP"}</button>
+    </>
+  );
+}
+
+/** Stop / take-profit trigger orders: stop-market, stop-limit, take-profit-market, take-profit-limit (placeConditional). */
+function TriggerOrder() {
+  const { market, base, w, info, mark, pos } = useCtx();
+  const { send } = useTx();
+  const blocked = useBlockedReason();
+  const [kind, setKind] = useState<TriggerKind>("stop"); const [exec, setExec] = useState<"market" | "limit">("market");
+  const [isBuy, setIsBuy] = useState(false);
+  const [trig, setTrig] = useState(""); const [lim, setLim] = useState(""); const [size, setSize] = useState("");
+  const [slip, setSlip] = useState(100); const [ro, setRo] = useState(true);
+  const position = pos?.size ?? 0n;
+  const v = info ? validateTrigger({ kind, isBuy, exec, triggerStr: trig, limitStr: lim, sizeStr: size, mark: mark ?? 0n, position, reduceOnly: ro, slippageBps: slip }, { ...info, unit: base }) : null;
+  const started = !!(trig || lim || size);
+  const name = `${kind === "stop" ? "Stop" : "Take-profit"} ${exec}`;
+  const submit = () => {
+    if (!v?.ok || !v.trigger || !v.limit || !v.size || !w.address) return;
+    send({ label: `${name}: ${isBuy ? "buy" : "sell"} ${fmtSize(v.size)} ${base} when price ${v.above ? "rises to" : "falls to"} ${trig}`, functionName: "placeConditional", args: [w.address, w.sub, market, isBuy, v.above, v.trigger, v.limit, v.size, ro], trading: true });
+  };
+  return (
+    <>
+      <div className="field"><Label text="Trigger type" tip="tpsl" />
+        <div className="seg" role="group" aria-label="Trigger type">
+          <button type="button" className={kind === "stop" ? "on" : ""} aria-pressed={kind === "stop"} onClick={() => setKind("stop")}>Stop</button>
+          <button type="button" className={kind === "tp" ? "on" : ""} aria-pressed={kind === "tp"} onClick={() => setKind("tp")}>Take-profit</button>
+        </div>
+      </div>
+      <div className="field"><Label text="When triggered, send a" htmlFor="texec" />
+        <div className="seg" role="group" aria-label="Order sent when triggered">
+          <button type="button" className={exec === "market" ? "on" : ""} aria-pressed={exec === "market"} onClick={() => setExec("market")}>Market</button>
+          <button type="button" className={exec === "limit" ? "on" : ""} aria-pressed={exec === "limit"} onClick={() => setExec("limit")}>Limit</button>
+        </div>
+      </div>
+      <Side isBuy={isBuy} set={setIsBuy} />
+      <p className="hint">{kind === "stop" ? "A stop " : "A take-profit "}{isBuy ? "buy" : "sell"} fires when the price {v?.above ?? (kind === "stop" ? isBuy : !isBuy) ? "rises to" : "falls to"} the trigger. Current price {mark ? fmtPrice(mark) : "-"} USDC. Your position: {fmtSize(position)} {base}.</p>
+      <Field id="trig" label="Trigger price" value={trig} onChange={setTrig} suffix="USDC" ph={mark ? formatFixed(mark, 6, 1, 1) : ""} />
+      {exec === "limit" ? <Field id="tlim" label="Limit price" value={lim} onChange={setLim} suffix="USDC" help="The limit order sent once the trigger is reached." />
+        : <div className="field"><Label text="Max slippage after trigger" tip="slippage" htmlFor="tslip" />
+            <div className="row"><div className="inp"><input id="tslip" type="number" min={0} max={1000} value={slip} onChange={(e) => setSlip(Number(e.target.value))} /><em>bps ({(slip / 100).toFixed(2)}%)</em></div>
+              {[50, 100, 300].map((x) => <button key={x} type="button" className="chip-btn" style={{ flex: "none" }} onClick={() => setSlip(x)}>{x / 100}%</button>)}</div>
+            <div className="hint">Sent as an immediate limit this far beyond the trigger. It can miss in a fast market.</div></div>}
+      <Field id="tsz" label="Size" value={size} onChange={setSize} suffix={base} help={position !== 0n ? <button type="button" className="btn link" onClick={() => setSize(formatFixed(abs(position), 8, 4, 8))}>Use whole position ({fmtSize(abs(position))} {base})</button> : undefined} />
+      <label className="check"><input type="checkbox" checked={ro} onChange={(e) => setRo(e.target.checked)} />Reduce-only <Tip k="reduceonly" /></label>
+      {started && v && v.errors.length > 0 && <ul className="errs">{v.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+      {started && v && v.warnings.length > 0 && <ul className="hint">{v.warnings.map((e) => <li key={e}>{e}</li>)}</ul>}
+      <p className="hint">Triggers are not guaranteed protection: a keeper (or anyone) fires it after the price is reached, and it may fill worse than the trigger.</p>
+      <button className={`btn full primary ${isBuy ? "buy" : "sell"}`} disabled={!!blocked || !v?.ok} onClick={submit}>{blocked ?? `Place ${name.toLowerCase()} ${isBuy ? "buy" : "sell"}`}</button>
+    </>
+  );
+}
+
+/** Scale: N limit orders spread evenly across a price range, sent one transaction each (there is no batch call on the exchange). */
+function Scale() {
+  const { market, base, w, info, mark } = useCtx();
+  const { send } = useTx();
+  const blocked = useBlockedReason();
+  const [isBuy, setIsBuy] = useState(true);
+  const [from, setFrom] = useState(""); const [to, setTo] = useState(""); const [size, setSize] = useState(""); const [n, setN] = useState(5);
+  const [post, setPost] = useState(false); const [ro, setRo] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const v = info ? validateScale({ isBuy, fromStr: from, toStr: to, sizeStr: size, n, reduceOnly: ro, mark: mark ?? 0n }, { ...info, unit: base }) : null;
+  const started = !!(from || to || size);
+  const submit = async () => {
+    if (!v?.ok || !w.address) return;
+    for (let i = 0; i < v.prices.length; i++) {
+      setProgress(`Placing order ${i + 1} of ${v.prices.length}`);
+      const p = buildOrderParams({ market, isBuy, price: v.prices[i]!, size: v.sizes[i]!, type: "limit", tif: post ? "PostOnly" : "GTC", reduceOnly: ro });
+      const st = await send({ label: `Scale ${i + 1}/${v.prices.length}: limit ${isBuy ? "buy" : "sell"} ${fmtSize(v.sizes[i]!)} ${base} @ ${fmtPrice(v.prices[i]!)}`, kind: "place", unit: base, functionName: "placeOrder", args: [w.address, w.sub, p], trading: true });
+      if (st !== "executed") { setProgress(`Stopped after ${i} of ${v.prices.length} orders (order ${i + 1} did not confirm). The earlier ones are still resting.`); return; }
+    }
+    setProgress(`All ${v.prices.length} orders placed`);
+  };
+  const busy = !!progress && progress.startsWith("Placing");
+  return (
+    <>
+      <p className="hint">A scale order places several limit orders evenly between two prices, so you enter or exit in steps. Each order is its own transaction.</p>
+      <Side isBuy={isBuy} set={setIsBuy} />
+      <div className="row" style={{ alignItems: "flex-start" }}>
+        <Field id="sfrom" label="Start price" value={from} onChange={setFrom} suffix="USDC" ph={mark ? formatFixed(mark, 6, 1, 1) : ""} />
+        <Field id="sto" label="End price" value={to} onChange={setTo} suffix="USDC" />
+      </div>
+      <div className="row" style={{ alignItems: "flex-start" }}>
+        <Field id="ssz" label="Total size" value={size} onChange={setSize} suffix={base} />
+        <div className="field"><Label text="Orders" htmlFor="sn" /><div className="inp"><input id="sn" type="number" min={2} max={10} value={n} onChange={(e) => setN(Number(e.target.value))} /></div></div>
+      </div>
+      <div className="row exec">
+        <label className="check"><input type="checkbox" checked={post} onChange={(e) => setPost(e.target.checked)} /><Tip k="postonly">Post-only</Tip></label>
+        <label className="check"><input type="checkbox" checked={ro} onChange={(e) => setRo(e.target.checked)} /><Tip k="reduceonly">Reduce-only</Tip></label>
+      </div>
+      {v && v.ok && (
+        <div className="kvl" aria-label="Scale preview">
+          {v.prices.map((p, i) => <Row key={i} label={`Order ${i + 1}`}>{fmtSize(v.sizes[i]!)} {base} @ {fmtPrice(p)}</Row>)}
+        </div>
+      )}
+      {started && v && v.errors.length > 0 && <ul className="errs">{v.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+      {started && v && v.warnings.length > 0 && <ul className="hint">{v.warnings.map((e) => <li key={e}>{e}</li>)}</ul>}
+      {progress && <p className="hint" role="status">{progress}</p>}
+      <button className={`btn full primary ${isBuy ? "buy" : "sell"}`} disabled={!!blocked || !v?.ok || busy} onClick={() => void submit()}>{blocked ?? (busy ? "Placing orders" : `Place ${v?.ok ? v.prices.length : n} ${isBuy ? "buy" : "sell"} orders`)}</button>
     </>
   );
 }

@@ -187,3 +187,33 @@ describe("cancel reasons (WASH-1 PriceBand)", () => {
     expect(cancelReasonText(null)).toBe("");
   });
 });
+
+import { scaleLevels, triggerAbove, validateScale, validateTrigger } from "./order";
+describe("advanced order types", () => {
+  const r = { tick: 100_000n, lot: 10_000n, minNotional: 10_000_000n, maxOrderSize: 10n ** 10n, unit: "BTC" } as never;
+  it("trigger direction: stop buy/tp sell fire upward, stop sell/tp buy fire downward", () => {
+    expect(triggerAbove("stop", true)).toBe(true); expect(triggerAbove("stop", false)).toBe(false);
+    expect(triggerAbove("tp", true)).toBe(false); expect(triggerAbove("tp", false)).toBe(true);
+  });
+  it("rejects a stop-sell trigger above the mark and accepts one below", () => {
+    const base = { kind: "stop" as const, isBuy: false, exec: "market" as const, limitStr: "", sizeStr: "0.0004", mark: 65_000_000_000n, position: 0n, reduceOnly: false, slippageBps: 50 };
+    expect(validateTrigger({ ...base, triggerStr: "66000" }, r).ok).toBe(false);
+    const ok = validateTrigger({ ...base, triggerStr: "64000" }, r);
+    expect(ok.ok).toBe(true); expect(ok.above).toBe(false); expect(ok.limit! < ok.trigger!).toBe(true);
+  });
+  it("stop-limit needs a limit price", () => {
+    const v = validateTrigger({ kind: "stop", isBuy: true, exec: "limit", triggerStr: "66000", limitStr: "", sizeStr: "0.0004", mark: 65_000_000_000n, position: 0n, reduceOnly: false, slippageBps: 50 }, r);
+    expect(v.ok).toBe(false); expect(v.errors.join()).toMatch(/limit price/i);
+  });
+  it("scale levels are even, on the tick grid, and sizes sum to the total", () => {
+    const { prices, sizes } = scaleLevels({ from: 65_000_000_000n, to: 64_000_000_000n, total: 70_000n, n: 3, tick: 100_000n, lot: 10_000n });
+    expect(prices).toEqual([65_000_000_000n, 64_500_000_000n, 64_000_000_000n]);
+    expect(sizes.reduce((a, b) => a + b, 0n)).toBe(70_000n);
+    expect(sizes.every((s) => s % 10_000n === 0n)).toBe(true);
+  });
+  it("scale validation catches too-small orders and identical prices", () => {
+    const v = validateScale({ isBuy: true, fromStr: "65000", toStr: "64900", sizeStr: "0.0003", n: 3, reduceOnly: false, mark: 65_500_000_000n }, r);
+    expect(v.ok).toBe(false);
+    expect(validateScale({ isBuy: true, fromStr: "65000", toStr: "65000", sizeStr: "0.01", n: 3, reduceOnly: false, mark: 0n }, r).ok).toBe(false);
+  });
+});
