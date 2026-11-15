@@ -39,7 +39,10 @@ async function forwardItems(items) { // items: JSON-RPC request objects -> respo
   for (let c = 0; c < need.length; c += CHUNK) {
     const idx = need.slice(c, c + CHUNK);
     const o = await slot(() => forwardOne(JSON.stringify(idx.length === 1 && !items.isBatch ? items[idx[0]] : idx.map((i) => items[i]))));
-    if (o.status !== 200) throw Object.assign(new Error("upstream " + o.status), { out: o });
+    if (o.status !== 200) { // give every request in the failed chunk its own error WITH its id, so a batch client (the indexer) can match them instead of failing the whole step
+      idx.forEach((i) => { out[i] = { jsonrpc: "2.0", id: items[i].id, error: { code: -32000, message: `upstream ${o.status}` } }; });
+      continue;
+    }
     const j = JSON.parse(o.text); const arr = Array.isArray(j) ? j : [j];
     idx.forEach((i, k) => { const r = Array.isArray(j) ? arr.find((x) => x.id === items[i].id) || arr[k] : arr[0]; out[i] = r; if (CACHEABLE.has(items[i].method) && r && !r.error) cache.set(keyOf(items[i]), { t: Date.now(), r }); });
   }
