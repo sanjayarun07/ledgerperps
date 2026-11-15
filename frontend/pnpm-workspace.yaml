@@ -5,4 +5,4 @@ allowBuilds:
   keccak: false
   sharp: false
   unrs-resolver: false
-  '@reown/appkit': set this to true or false
+  '@reown/appkit': false
