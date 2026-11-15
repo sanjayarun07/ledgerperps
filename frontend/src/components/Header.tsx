@@ -66,6 +66,8 @@ export default function Header() {
               {wallet.open && (
                 <div className="menu" role="menu">
                   {w.mode === "burner" && <p className="hint" style={{ margin: "0 0 8px" }}><span className="chip dev">Dev burner (mock)</span><br />Keys live in this browser. Dev only.</p>}
+                  {w.mode === "privy" && <p className="hint" style={{ margin: "0 0 8px" }}>Signed in as {w.email ?? "email"}<br />{w.mfaEnrolled ? "Two-step verification is on." : "Two-step verification is off."}</p>}
+                  {w.mode === "privy" && !w.mfaEnrolled && w.enrollMfa && <button role="menuitem" className="menu-item" onClick={() => { wallet.setOpen(false); w.enrollMfa?.(); }}>Turn on two-step verification</button>}
                   {ticket.subaccounts && <label className="menu-row">Subaccount
                     <span className="inp" style={{ width: 64, minHeight: 32 }}><select value={w.sub} onChange={(e) => w.setSub(Number(e.target.value))} aria-label="Subaccount">{Array.from({ length: 8 }, (_, i) => <option key={i} value={i}>{i}</option>)}</select></span>
                   </label>}
@@ -105,6 +107,7 @@ function ConnectButton() {
       <button className="btn brand" id="connect-btn" onClick={() => pop.setOpen(!pop.open)} aria-expanded={pop.open} aria-haspopup="true">Connect wallet</button>
       {pop.open && (
         <div className="menu wide" role="menu">
+          {w.connectEmail && <button className="btn full" role="menuitem" onClick={() => { w.connectEmail?.(); pop.setOpen(false); }}>Sign in with email</button>}
           <button className="btn full" role="menuitem" onClick={() => { w.connectInjected(); pop.setOpen(false); }}>Browser wallet (injected)</button>
           {w.connectError && <p className="errs" role="alert">{w.connectError}</p>}
           {w.burnerAllowed && (

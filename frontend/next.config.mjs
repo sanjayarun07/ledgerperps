@@ -13,6 +13,8 @@ const nextConfig = {
       config.resolve.alias["@/generated/deployment.json"] = to; // as written in imports
       config.resolve.alias[path.join(here, "src/generated/deployment.json")] = to; // after the tsconfig `@/*` path mapping has resolved it
     }
+    // Privy ships optional Solana support whose packages do not resolve together. We only use email + Ethereum wallets, so stub them out.
+    for (const m of ["@solana/kit", "@solana-program/system", "@solana-program/token", "@solana-program/token-2022", "@solana-program/compute-budget"]) config.resolve.alias[m] = false;
     return config;
   },
 };
