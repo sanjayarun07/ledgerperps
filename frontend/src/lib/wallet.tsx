@@ -87,6 +87,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (ak) setAgentPk(ak as Hex);
     setUseAgentKeyState(LS.get("perps.useAgent") === "1");
     setUseRelayerState(LS.get("perps.useRelayer") === "1");
+    setWantInjected(LS.get("perps.injected") !== "0"); // wagmi reconnects the wallet on load; without this flag the header showed "Connect wallet" after every reload
     setReady(true);
   }, [burnerAllowed]);
 
@@ -113,7 +114,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setConnectError(undefined);
     const c = connectors.find((x) => x.type === "injected") ?? connectors[0];
     if (!c) { setConnectError("No injected wallet found"); return; }
-    setBurner(null); LS.set("perps.burner", null); setWantInjected(true);
+    setBurner(null); LS.set("perps.burner", null); setWantInjected(true); LS.set("perps.injected", "1");
     connect({ connector: c, chainId: CHAIN_ID });
   }, [connect, connectors]);
 
@@ -124,7 +125,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     LS.set("perps.burner", JSON.stringify(spec, (_k, v) => (typeof v === "bigint" ? `${v}n` : v)));
   }, [burnerAllowed, wagmiDisconnect]);
 
-  const disconnect = useCallback(() => { setBurner(null); LS.set("perps.burner", null); setWantInjected(false); wagmiDisconnect(); }, [wagmiDisconnect]);
+  const disconnect = useCallback(() => { setBurner(null); LS.set("perps.burner", null); setWantInjected(false); LS.set("perps.injected", "0"); wagmiDisconnect(); }, [wagmiDisconnect]);
   const setSub = useCallback((n: number) => { setSubState(n); LS.set("perps.sub", String(n)); }, []);
   const generateAgentKey = useCallback(() => { const k = generatePrivateKey(); setAgentPk(k); LS.set("perps.agentPk", k); }, []);
   const forgetAgentKey = useCallback(() => { setAgentPk(null); LS.set("perps.agentPk", null); setUseAgentKeyState(false); LS.set("perps.useAgent", "0"); }, []);
