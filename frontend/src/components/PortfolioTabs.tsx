@@ -123,7 +123,7 @@ function Twaps() {
       <tbody>{twaps.map((t) => (
         <tr key={t.id.toString()}><td className="num">#{t.id.toString()}</td><td>{name(t.market)}</td><td className={t.isBuy ? "long" : "short"}>{t.isBuy ? "▲ Buy" : "▼ Sell"}</td>
           <td className="num">{t.done} / {t.failed} / {t.slices}</td><td className="r num">{fmtSize(t.filled)} / {fmtSize(t.total)}</td><td>{t.active ? (t.nextTime > clock.now ? `${when(t.nextTime)} (in ${t.nextTime - clock.now}s chain time)` : "due now") : "-"}</td><td>{t.active ? "active" : t.status ?? "finished"}</td>
-          <td>{t.active && (<><button className="btn sm" disabled={t.nextTime > clock.now} title={t.nextTime > clock.now ? "Not due yet in chain time: the contract rejects an early slice" : "Anyone can run a due slice; it executes as an IOC order at mark ± slippage"} onClick={() => send({ label: `Run TWAP #${t.id} slice`, functionName: "executeTwapSlice", args: [t.id] })}>Run slice</button>{" "}
+          <td>{t.active && (<><button className="btn sm" disabled={t.nextTime > clock.now} title={t.nextTime > clock.now ? "Not due yet in chain time: the contract rejects an early slice" : "Anyone can run a due slice; it executes as an IOC order at mark ± slippage"} onClick={() => send({ label: `Run TWAP #${t.id} slice`, functionName: "executeTwapSlice", args: [t.id], gasFloor: 1_500_000n })}>Run slice</button>{" "}
             <button className="btn sm danger" onClick={() => send({ label: `Cancel TWAP #${t.id}`, functionName: "cancelTwap", args: [t.id], trading: true })}>Cancel</button></>)}</td></tr>
       ))}</tbody></table>
   );

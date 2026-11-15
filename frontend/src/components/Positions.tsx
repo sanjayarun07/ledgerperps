@@ -89,6 +89,7 @@ function CloseDialog({ p, onClose }: { p: PositionInfo; onClose: () => void }) {
   const est = walk.avg && v.mark ? closeEstimate({ positionSize: p.size, entry: v.entry, avgExit: walk.avg, closeSize: size, feeBps: 5n, marginReleased: v.margin !== null && full > 0n ? (v.margin * size) / full : 0n }) : null;
   const imp = impactBps(walk.avg, v.mark ?? 0n, isBuy);
   const ok = v.rules.reduce && v.info && v.mark && size > 0n && walk.filled > 0n;
+  const attached = (useConditionals(v.w.acct).data ?? []).filter((c) => c.market === p.market && c.reduceOnly && c.active).length;
   const submit = () => {
     if (!v.info || !v.mark || !v.w.address) return;
     send({ label: `Close ${fmtSize(size)} ${MARKETS[p.market].base} of ${name(p.market)} (reduce-only)`, kind: "place", unit: MARKETS[p.market].base, functionName: "placeOrder", trading: true,
@@ -114,6 +115,7 @@ function CloseDialog({ p, onClose }: { p: PositionInfo; onClose: () => void }) {
         </div>
         {walk.filled < size && walk.filled > 0n && <p className="callout warn">The book only has {fmtSize(walk.filled)} {MARKETS[p.market].base} of depth: the rest of this order would be canceled.</p>}
         {!v.rules.reduce && <p className="callout bad">{v.rules.notice}</p>}
+        {attached > 0 && size >= full && <p className="callout warn">This position has {attached} take-profit / stop-loss {attached === 1 ? "order" : "orders"} attached. They stay active after you close and do nothing without a position, so cancel {attached === 1 ? "it" : "them"} under Triggers.</p>}
         <p className="hint">Proceeds are an estimate: margin released plus realised PnL minus the taker fee (5 bps assumed). The contract settles the real numbers.</p>
         <div className="row"><button className="btn" onClick={onClose}>Keep position</button><button className="btn sell" disabled={!ok} onClick={submit}>Close {fmtSize(size)} {MARKETS[p.market].base}</button></div>
       </div>

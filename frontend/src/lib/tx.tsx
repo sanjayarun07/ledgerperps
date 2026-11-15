@@ -35,6 +35,8 @@ interface Req {
   prepare?: () => Promise<readonly unknown[]>;
   /** context for friendlier errors (e.g. the USDC shortfall for an Unhealthy revert) */
   ctx?: ErrorContext;
+  /** minimum gas limit for calls that wrap a child call in try/catch (TWAP slices): the estimator can settle on a limit where the child runs out of gas, is caught, and the slice is recorded as failed */
+  gasFloor?: bigint;
 }
 interface TxCtx { txs: TxEntry[]; send(r: Req): Promise<TxEntry["state"]>; clear(): void; dismiss(id: number): void }
 const Ctx = createContext<TxCtx | null>(null);
@@ -132,7 +134,7 @@ export function TxProvider({ children }: { children: ReactNode }) {
         // Pre-flight simulation: surfaces the decoded custom error before anything is signed. Not a result: just a guard.
         await publicClient.simulateContract(req);
         // A key held in the browser (session key, relayer) is sent with exactly the estimated gas, and on Arbitrum the estimate can land a few percent short of what the call then needs (first-touch storage, the fill path): "out of gas" with the gas spent. Add 40% headroom off-local; unused gas is not charged.
-        const gas = IS_LOCAL ? undefined : await publicClient.estimateContractGas(req).then((g) => (g * 14n) / 10n).catch(() => undefined);
+        const gas = IS_LOCAL ? undefined : await publicClient.estimateContractGas(req).then((g) => { const h = (g * 14n) / 10n; return r.gasFloor && r.gasFloor > h ? r.gasFloor : h; }).catch(() => r.gasFloor);
         hash = await client.writeContract({ ...req, chain: client.chain, account: client.account ?? account, ...(gas ? { gas } : {}), ...(await feeCaps()) });
       }
     } catch (e) { patch(id, { state: "failed", error: explainError(e, r.ctx) }); return "failed"; }
