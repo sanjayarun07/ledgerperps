@@ -119,7 +119,7 @@ function Twaps() {
   const clock = useChainClock();
   if (!twaps.length) return <Empty title="No TWAP orders" body="A TWAP splits a big order into slices over time. Start one from the Advanced tab of the order panel." />;
   return (
-    <table><thead><tr><th>ID</th><th>Market</th><th>Side</th><th>Slices done / failed / total</th><th className="r">Filled / total</th><th>Next slice</th><th>Status</th><th /></tr></thead>
+    <table><thead><tr><th>ID</th><th>Market</th><th>Side</th><th title="Attempts made / attempts that failed / slices planned. After the planned slices a short TWAP gets up to 3 catch-up attempts, so the first number can exceed the third.">Slices done / failed / total</th><th className="r">Filled / total</th><th>Next slice</th><th>Status</th><th /></tr></thead>
       <tbody>{twaps.map((t) => (
         <tr key={t.id.toString()}><td className="num">#{t.id.toString()}</td><td>{name(t.market)}</td><td className={t.isBuy ? "long" : "short"}>{t.isBuy ? "▲ Buy" : "▼ Sell"}</td>
           <td className="num">{t.done} / {t.failed} / {t.slices}</td><td className="r num">{fmtSize(t.filled)} / {fmtSize(t.total)}</td><td>{t.active ? (t.nextTime > clock.now ? `${when(t.nextTime)} (in ${t.nextTime - clock.now}s chain time)` : "due now") : "-"}</td><td>{t.active ? "active" : t.status ?? "finished"}</td>

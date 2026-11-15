@@ -68,7 +68,7 @@ describe("PerpTwap", () => {
     await expect(place(e, e.bob, { total: btc(0.1) })).to.be.reverted;
   });
 
-  it("counts a failed slice (no liquidity) without reverting, and last slice sends the remainder", async () => {
+  it("no liquidity: IOC with no fill is ok with 0 filled; the TWAP gets catch-up attempts, then ends", async () => {
     const e = await loadFixture(funded);
     await place(e, e.bob, { isBuy: false, slices: 2, total: btc(1) }); // sell; no bids -> no fill
     await e.ex.executeTwapSlice(1);
@@ -80,10 +80,49 @@ describe("PerpTwap", () => {
     await e.ex.executeTwapSlice(1);
     t = await e.ex.twapStatus(1);
     expect(t.done).to.equal(2);
+    expect(t.active).to.equal(true); // planned slices used up but still short: catch-up attempts remain
+    for (let i = 0; i < 3; i++) { await tick(e, 60); await e.ex.executeTwapSlice(1); }
+    t = await e.ex.twapStatus(1);
+    expect(t.done).to.equal(5); // 2 planned + 3 catch-up
     expect(t.active).to.equal(false);
+    expect(t.filled).to.equal(0);
   });
 
-  it("reduce-only with no position: slice reverts internally and is counted as failed", async () => {
+  it("catch-up: a partial last slice is completed by a later attempt when liquidity returns", async () => {
+    const e = await loadFixture(funded);
+    // bob sells 1 BTC in 2 slices; carol rests only 0.3 BTC of bids so slice 1 (0.5) fills partly
+    await e.ex.connect(e.carol).placeOrder(e.carol.address, 0, order({ isBuy: true, price: usd(49900), size: btc(0.3) }));
+    await place(e, e.bob, { isBuy: false, slices: 2, total: btc(1) });
+    await e.ex.executeTwapSlice(1);
+    let t = await e.ex.twapStatus(1);
+    expect(t.filled).to.equal(btc(0.3));
+    await tick(e, 60);
+    await e.ex.executeTwapSlice(1); // last planned slice sends the remainder (0.7); no bids left -> 0 filled
+    t = await e.ex.twapStatus(1);
+    expect(t.filled).to.equal(btc(0.3));
+    expect(t.active).to.equal(true);
+    // liquidity returns: the catch-up attempt sends the whole remainder
+    await e.ex.connect(e.carol).placeOrder(e.carol.address, 0, order({ isBuy: true, price: usd(49900), size: btc(2) }));
+    await tick(e, 60);
+    await expect(e.ex.executeTwapSlice(1)).to.emit(e.ex, "TwapDone").withArgs(1, btc(1), 0);
+    t = await e.ex.twapStatus(1);
+    expect(t.filled).to.equal(btc(1));
+    expect(t.active).to.equal(false);
+    expect(t.done).to.equal(3);
+  });
+
+  it("too little gas reverts instead of recording a failed slice", async () => {
+    const e = await loadFixture(funded);
+    await place(e, e.bob, { slices: 2 });
+    await expect(e.ex.executeTwapSlice(1, { gasLimit: 700_000 })).to.be.reverted;
+    const t = await e.ex.twapStatus(1);
+    expect(t.done).to.equal(0); // nothing consumed
+    expect(t.failed).to.equal(0);
+    await e.ex.executeTwapSlice(1); // with normal gas it runs
+    expect((await e.ex.twapStatus(1)).done).to.equal(1);
+  });
+
+  it("reduce-only with no position: every attempt reverts internally and is counted as failed", async () => {
     const e = await loadFixture(funded);
     await place(e, e.bob, { ro: true, slices: 2 });
     await expect(e.ex.executeTwapSlice(1)).to.emit(e.ex, "TwapSlice").withArgs(1, 0, 0, false);
@@ -91,10 +130,9 @@ describe("PerpTwap", () => {
     expect(t.failed).to.equal(1);
     expect(t.done).to.equal(1);
     expect(t.active).to.equal(true);
-    await tick(e, 60);
-    await e.ex.executeTwapSlice(1);
+    for (let i = 0; i < 4; i++) { await tick(e, 60); await e.ex.executeTwapSlice(1); }
     const t2 = await e.ex.twapStatus(1);
-    expect(t2.failed).to.equal(2);
+    expect(t2.failed).to.equal(5); // 2 planned + 3 catch-up
     expect(t2.active).to.equal(false);
     expect(await e.ex.twapCount(await e.key(e.bob))).to.equal(0);
   });

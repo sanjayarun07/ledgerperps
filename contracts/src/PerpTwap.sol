@@ -13,10 +13,12 @@ interface IPlacer {
 ///      best-effort and depends on keeper liveness. A slice is an IOC order priced at mark +/- slippageBps and goes
 ///      through the normal margin path; it may fill partially or not at all. A slice that reverts for ANY reason (no
 ///      liquidity inside the limit, insufficient margin, reduce-only with no position, market paused, oracle degraded /
-///      stale, global pause, ...) is NOT retried: it is counted in `failed`, consumes its schedule slot, and its
-///      unfilled quantity is not re-queued except that the final slice sends `total - filled` (the whole unfilled
-///      remainder), so a TWAP with failures can end with a larger last slice. If keepers are late the schedule does not
-///      burst to catch up: a late slice re-anchors the cadence at now + interval.
+///      stale, global pause, ...) is counted in `failed` and consumes its schedule slot. Its unfilled quantity is carried
+///      forward: the final planned slice sends `total - filled` (the whole remainder), and if the TWAP is still short
+///      after the planned slices it gets up to CATCHUP (3) more attempts, each sending the remainder, one interval apart.
+///      `done` counts attempts, so it can exceed `slices`. A call with too little gas reverts ("gas") instead of being
+///      recorded as a failed slice. If keepers are late the schedule does not burst to catch up: a late slice
+///      re-anchors the cadence at now + interval.
 contract PerpTwap is PerpBase {
     event TwapPlaced(uint64 indexed id, bytes32 indexed acct, uint8 market, bool isBuy, uint128 total, uint16 slices, uint32 interval, uint32 slippageBps, bool reduceOnly);
     event TwapSlice(uint64 indexed id, uint16 sliceIndex, uint128 filled, bool ok);
@@ -24,6 +26,11 @@ contract PerpTwap is PerpBase {
     event TwapCanceled(uint64 indexed id, uint128 filled);
 
     uint256 constant MAX_TWAPS = 8;
+    /// @dev Catch-up attempts after the planned slices while the TWAP is still short of `total`. Each one sends the whole remainder.
+    uint16 constant CATCHUP = 3;
+    /// @dev A slice wraps the child order in try/catch. With less gas than this the child can run out of gas, be caught and be recorded
+    ///      as `failed` (eth_estimateGas can settle on exactly such a limit). Revert instead: nothing is consumed and the caller retries.
+    uint256 constant SLICE_GAS_FLOOR = 800_000;
 
     function placeTwap(
         address owner, uint8 sub, uint8 market, bool isBuy, uint128 total, uint16 slices,
@@ -49,9 +56,10 @@ contract PerpTwap is PerpBase {
         Twap storage t = twaps[id];
         if (!t.active) revert BadParam("inactive");
         if (block.timestamp < t.nextTime) revert BadParam("too early");
+        if (gasleft() < SLICE_GAS_FLOOR) revert BadParam("gas");
 
         uint16 idx = t.done;
-        bool last = idx + 1 == t.slices;
+        bool last = idx + 1 >= t.slices; // the final planned slice and every catch-up attempt send the whole remainder
         uint128 remaining = t.total - t.filled;
         uint128 sz;
         bool ok;
@@ -84,8 +92,8 @@ contract PerpTwap is PerpBase {
         // late keeper: restart the cadence from now (otherwise the next slice would be instantly due again)
         t.nextTime = nt > block.timestamp ? nt : uint64(block.timestamp) + t.interval;
         emit TwapSlice(id, idx, got, ok);
-        // Done when all slices ran, or nothing is left to execute.
-        if (t.done == t.slices || t.filled == t.total) {
+        // Done when everything is filled, or the planned slices and the catch-up attempts are used up.
+        if (t.done >= t.slices + CATCHUP || t.filled == t.total) {
             t.active = false;
             twapCount[t.acct]--;
             emit TwapDone(id, t.filled, t.failed);
