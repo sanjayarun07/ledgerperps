@@ -100,7 +100,8 @@ async function main() {
     const market = d.marketIds[n]!;
     const cfg = await c.marketConfig(market, true);
     const px = await c.markPrice(market);
-    const raw = (usd: number) => (((toUsdc(usd) * 10n ** 8n) / px) / cfg.lot) * cfg.lot;
+    // round UP to a lot and never below the market's min notional (BTC lot 0.0001 is ~$6.5, so $12 rounded down fell under the $10 minimum and BTC got no quotes)
+    const raw = (usd: number) => { const want = (toUsdc(usd) * 10n ** 8n) / px; const lots = (want + cfg.lot - 1n) / cfg.lot; let sz = lots * cfg.lot; while ((sz * px) / 10n ** 8n < cfg.minNotional * 12n / 10n) sz += cfg.lot; return sz; };
     const quote: QuoteConfig = {
       halfSpreadBps: num("HALF_SPREAD_BPS", 25), levels: num("LEVELS", 2), levelStepBps: num("LEVEL_STEP_BPS", 20),
       levelSize: raw(levelUsd), maxInventory: raw(maxInvUsd), skewBps: num("SKEW_BPS", 10),

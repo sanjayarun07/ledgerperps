@@ -1,9 +1,9 @@
 {
-  "ranAt": "2026-11-14T17:43:07.396Z",
+  "ranAt": "2026-11-14T18:38:56.609Z",
   "chainId": 421614,
-  "exchange": "0xBc49e99760080CBd3590062260346D00ad2ACCB1",
+  "exchange": "0x67486Aa612c7395cD85fd0114990555aBE46c112",
   "admin": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29",
-  "gitCommit": "7824ace13cf2140a66b3a9a644aafad445c0ba7b",
+  "gitCommit": "219e16c2006ad9c6cc9d2122c6c67ac7908394b2",
   "configHash": "0x84626edafa31f7f6afac325b1f1af908fb33b8a6965ea9c199a84e547c496866",
   "markets": [
     {
@@ -28,17 +28,17 @@
   "txs": [
     {
       "market": "BTC-USD",
-      "hash": "0x21dcd27ddddab2f4a19cf1a6bfdcf142b86bbe4408a933801e20bf9a2f24a08c",
-      "block": 329213643,
-      "gasUsed": "70750",
-      "arbiscan": "https://sepolia.arbiscan.io/tx/0x21dcd27ddddab2f4a19cf1a6bfdcf142b86bbe4408a933801e20bf9a2f24a08c"
+      "hash": "0xcfe58a366b0b2599d3f30d4a7cbba6c82da1c983915dd7c6201bb77be057fbc2",
+      "block": 329226163,
+      "gasUsed": "63802",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0xcfe58a366b0b2599d3f30d4a7cbba6c82da1c983915dd7c6201bb77be057fbc2"
     },
     {
       "market": "DEMO-USD",
-      "hash": "0xdc0c98449a73b2d58fbefddb8995fe0ff59e253e6626bf358cd8e09bbda27214",
-      "block": 329213661,
-      "gasUsed": "70647",
-      "arbiscan": "https://sepolia.arbiscan.io/tx/0xdc0c98449a73b2d58fbefddb8995fe0ff59e253e6626bf358cd8e09bbda27214"
+      "hash": "0x23e545506ad2336534bed2a7a3c8a89628172ccc21407970dcafc347703b1663",
+      "block": 329226177,
+      "gasUsed": "63790",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0x23e545506ad2336534bed2a7a3c8a89628172ccc21407970dcafc347703b1663"
     }
   ]
 }
