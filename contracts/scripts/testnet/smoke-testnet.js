@@ -64,6 +64,7 @@ async function run({ d, chainId, signers, gate, out, checkDeployer }) {
     s.price1e6 = p.toString(); s.updatedAt = Number(t); s.ageSecs = blk.timestamp - Number(t);
   });
   if (!px && !aborted) aborted = "oracle read failed (Pyth stale? run push-pyth.js with CONFIRM_PYTH_PUSH=yes or set SMOKE_PUSH_PYTH=yes)";
+  if (live && !px) throw new Error("smoke cannot continue: " + (stages.find((x) => x.status === "FAIL")?.error || "price is 0") + " (not sending any transaction)");
   if (!live) {
     console.log("\nPlan (live): approve -> deposit x2 -> place+cancel resting bid -> cross (maker bid / taker IOC ask) -> close -> pokeFunding -> accountState -> withdraw 1 USDC");
     console.log(JSON.stringify(stages, null, 1)); console.log("\nDRY-RUN: nothing sent, smoke-last-run.json not overwritten."); return;

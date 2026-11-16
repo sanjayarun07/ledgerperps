@@ -1,0 +1,274 @@
+{
+  "env": "TESTNET-ARBITRUM-SEPOLIA (unaudited prototype; modules unlocked)",
+  "chainId": 421614,
+  "deployer": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29",
+  "admin": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29",
+  "guardian": null,
+  "collateral": "mock",
+  "usdc": "0x1Ac0E6A41B436Fdc231Bd3b2cB84e221969B8565",
+  "oracle": "0x22B5D0D3F5730157Ecb718B726A3478963267743",
+  "exchange": "0x0FCBB4f62A227fD37dE9368A169A4706eCf87D61",
+  "oracleMode": "chainlink",
+  "feeds": {
+    "BTC-USD": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+    "ETH-USD": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+    "SOL-USD": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+    "DEMO-USD": "0x88b60ec3b4ac835582503f2542b46d708b1ea9e49fd140b5ec143fdb3d7fbd7f"
+  },
+  "marketIds": {
+    "BTC-USD": 0,
+    "ETH-USD": 1,
+    "SOL-USD": 2,
+    "DEMO-USD": 3
+  },
+  "demo": {
+    "market": "DEMO-USD",
+    "marketId": 3,
+    "label": "DEMO - admin-set price, not a real feed",
+    "feed": "0x88b60ec3b4ac835582503f2542b46d708b1ea9e49fd140b5ec143fdb3d7fbd7f",
+    "manualOracle": "0x2a0A9528f62cA03c2f65BBc4dBCe6964ADd8193b",
+    "routingOracle": "0x22B5D0D3F5730157Ecb718B726A3478963267743",
+    "startPrice": "100000000"
+  },
+  "contracts": {
+    "MockUSDC": {
+      "address": "0x1Ac0E6A41B436Fdc231Bd3b2cB84e221969B8565",
+      "contract": "MockUSDC",
+      "ctorArgs": [],
+      "sizeBytes": 1842,
+      "block": 329772806,
+      "tx": "0x8b7b5a8f2188639e82437e15ad7c70ae42faedb4f5f3430ef801aa5c80ed3a0c"
+    },
+    "ChainlinkAdapter": {
+      "address": "0x5E3058B9E035BFDD9d9cd6E7EA736f1D7E8f768D",
+      "contract": "ChainlinkAdapter",
+      "ctorArgs": [],
+      "sizeBytes": 1093,
+      "block": 329772817,
+      "tx": "0xd7dc1f23fa3f990dc281385fdfef6e99fe9513cfc035a9dc34fd6bbd2341264f"
+    },
+    "DemoManualOracle": {
+      "address": "0x2a0A9528f62cA03c2f65BBc4dBCe6964ADd8193b",
+      "contract": "ManualOracle",
+      "ctorArgs": [],
+      "sizeBytes": 721,
+      "block": 329772871,
+      "tx": "0x2d523257d99778936cc0cd774f374bcbeb98ace00e4b57daea32b3dd983bc89f"
+    },
+    "RoutingOracle": {
+      "address": "0x22B5D0D3F5730157Ecb718B726A3478963267743",
+      "contract": "RoutingOracle",
+      "ctorArgs": [
+        "0x5E3058B9E035BFDD9d9cd6E7EA736f1D7E8f768D",
+        "0x2a0A9528f62cA03c2f65BBc4dBCe6964ADd8193b",
+        "0x88b60ec3b4ac835582503f2542b46d708b1ea9e49fd140b5ec143fdb3d7fbd7f"
+      ],
+      "sizeBytes": 739,
+      "block": 329772882,
+      "tx": "0x899b8e0f4eaac846ab495b56f2edd347843713cca231184704db8221b68e7729"
+    },
+    "PerpExchange": {
+      "address": "0x0FCBB4f62A227fD37dE9368A169A4706eCf87D61",
+      "contract": "PerpExchange",
+      "ctorArgs": [
+        "0x1Ac0E6A41B436Fdc231Bd3b2cB84e221969B8565",
+        "0x22B5D0D3F5730157Ecb718B726A3478963267743",
+        "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29"
+      ],
+      "sizeBytes": 22909,
+      "block": 329772897,
+      "tx": "0x95961a297b64e64f65eb0ac1f24677bef960a69f58f49f97ca3c33239b33422a"
+    },
+    "PerpTrading": {
+      "address": "0xb1b3c770925947B1b14206f2043e2a8EccFEAEFD",
+      "contract": "PerpTrading",
+      "ctorArgs": [],
+      "sizeBytes": 17817,
+      "block": 329772908,
+      "tx": "0xaf530883cb6a46e54686d11752a9361a386420ceb74f11a040b04de33a05ee68"
+    },
+    "PerpExtras": {
+      "address": "0x9a216e3C889Dc1EECa311591A49a83Ed0E7E1bBA",
+      "contract": "PerpExtras",
+      "ctorArgs": [],
+      "sizeBytes": 19036,
+      "block": 329772940,
+      "tx": "0xe59071ef87a3d9f5d0fdd61f20e94bf4862a260f556f9ff3c045c8777c07f916"
+    },
+    "PerpLiquidation": {
+      "address": "0x1F78be99B20478E7dc8bc507D4d32D87e5713c13",
+      "contract": "PerpLiquidation",
+      "ctorArgs": [],
+      "sizeBytes": 19309,
+      "block": 329772960,
+      "tx": "0x1942aa445385e4f9a56c507596f4b4ed4c4d6b570e19b9ee30852e8aa3a25a16"
+    },
+    "PerpTwap": {
+      "address": "0x688CBb6FDc53f09E98Aa049707b5665E87184Ac6",
+      "contract": "PerpTwap",
+      "ctorArgs": [],
+      "sizeBytes": 10767,
+      "block": 329772984,
+      "tx": "0xe0383511ca2466e4ecbe14107acd7617f02fb0a2aadf0db5d19868dbc9c14bb2"
+    },
+    "PerpAdl": {
+      "address": "0xed8a136922DE073674A186bF05Ceb113967FAb22",
+      "contract": "PerpAdl",
+      "ctorArgs": [],
+      "sizeBytes": 15216,
+      "block": 329773007,
+      "tx": "0x5560b33e71345413be325cc43fad2116618bc2f0a3612c5f6165147e6777be6b"
+    }
+  },
+  "transactions": [
+    {
+      "label": "deploy MockUSDC",
+      "hash": "0x8b7b5a8f2188639e82437e15ad7c70ae42faedb4f5f3430ef801aa5c80ed3a0c",
+      "block": 329772806,
+      "gasUsed": "507831"
+    },
+    {
+      "label": "deploy ChainlinkAdapter",
+      "hash": "0xd7dc1f23fa3f990dc281385fdfef6e99fe9513cfc035a9dc34fd6bbd2341264f",
+      "block": 329772817,
+      "gasUsed": "289162"
+    },
+    {
+      "label": "call ChainlinkAdapter.setFeed(BTC-USD)",
+      "hash": "0x256b3441c5f1f863684978582bc2d68327e857766a8cc4d2da6bc0e0f30b9d9e",
+      "block": 329772828,
+      "gasUsed": "44394"
+    },
+    {
+      "label": "call ChainlinkAdapter.setFeed(ETH-USD)",
+      "hash": "0x4d3ab8dbd1e62ab54e23221d6824b72dfaf889d4212ac88ec6a820248ed505d9",
+      "block": 329772844,
+      "gasUsed": "44394"
+    },
+    {
+      "label": "call ChainlinkAdapter.setFeed(SOL-USD)",
+      "hash": "0xd7b99a919a518aef9a5893ec08851b6c3cfd6b2ba0e91f0b9299ce21cc47049d",
+      "block": 329772855,
+      "gasUsed": "44394"
+    },
+    {
+      "label": "deploy DemoManualOracle",
+      "hash": "0x2d523257d99778936cc0cd774f374bcbeb98ace00e4b57daea32b3dd983bc89f",
+      "block": 329772871,
+      "gasUsed": "208497"
+    },
+    {
+      "label": "deploy RoutingOracle",
+      "hash": "0x899b8e0f4eaac846ab495b56f2edd347843713cca231184704db8221b68e7729",
+      "block": 329772882,
+      "gasUsed": "216923"
+    },
+    {
+      "label": "deploy PerpExchange",
+      "hash": "0x95961a297b64e64f65eb0ac1f24677bef960a69f58f49f97ca3c33239b33422a",
+      "block": 329772897,
+      "gasUsed": "5329557"
+    },
+    {
+      "label": "deploy PerpTrading",
+      "hash": "0xaf530883cb6a46e54686d11752a9361a386420ceb74f11a040b04de33a05ee68",
+      "block": 329772908,
+      "gasUsed": "4126803"
+    },
+    {
+      "label": "call PerpExchange.registerModule(PerpTrading, 3 selectors)",
+      "hash": "0x51e472874cc66c995e089e1e2e79c91c41209bbf6e0e18c19fbda160eb3c44e2",
+      "block": 329772923,
+      "gasUsed": "99203"
+    },
+    {
+      "label": "deploy PerpExtras",
+      "hash": "0xe59071ef87a3d9f5d0fdd61f20e94bf4862a260f556f9ff3c045c8777c07f916",
+      "block": 329772940,
+      "gasUsed": "4389015"
+    },
+    {
+      "label": "call PerpExchange.registerModule(PerpExtras, 14 selectors)",
+      "hash": "0x3e898d2c76b6413ef99e12c426f365ca3f79769430bc24fac81b262e2abbd284",
+      "block": 329772950,
+      "gasUsed": "348407"
+    },
+    {
+      "label": "deploy PerpLiquidation",
+      "hash": "0x1942aa445385e4f9a56c507596f4b4ed4c4d6b570e19b9ee30852e8aa3a25a16",
+      "block": 329772960,
+      "gasUsed": "4449573"
+    },
+    {
+      "label": "call PerpExchange.registerModule(PerpLiquidation, 11 selectors)",
+      "hash": "0x4c989dacc33ab0dc2f57d79e4dd774be5617f7557f3074d971f82fbedc928f41",
+      "block": 329772970,
+      "gasUsed": "280451"
+    },
+    {
+      "label": "deploy PerpTwap",
+      "hash": "0xe0383511ca2466e4ecbe14107acd7617f02fb0a2aadf0db5d19868dbc9c14bb2",
+      "block": 329772984,
+      "gasUsed": "2601985"
+    },
+    {
+      "label": "call PerpExchange.registerModule(PerpTwap, 4 selectors)",
+      "hash": "0x38d28263d5eefd4126306905524e5b9d8a77e2013cb547cd89f09d11f93fc721",
+      "block": 329772994,
+      "gasUsed": "121859"
+    },
+    {
+      "label": "deploy PerpAdl",
+      "hash": "0x5560b33e71345413be325cc43fad2116618bc2f0a3612c5f6165147e6777be6b",
+      "block": 329773007,
+      "gasUsed": "3564265"
+    },
+    {
+      "label": "call PerpExchange.registerModule(PerpAdl, 6 selectors)",
+      "hash": "0xaf528a63bc24db6bfca09326de78c905bf80075ceab2f0f18cc54df891dd563a",
+      "block": 329773017,
+      "gasUsed": "167171"
+    },
+    {
+      "label": "call PerpExchange.createMarket(BTC-USD)",
+      "hash": "0x1007dff89db9ea86b24701b6c47254411949b9d673ba311882b31fbdecc64531",
+      "block": 329773031,
+      "gasUsed": "288813"
+    },
+    {
+      "label": "call PerpExchange.createMarket(ETH-USD)",
+      "hash": "0xba34b4f6a337dd2839356d2dfb4972710c6e7b0a12dbc731906717ec3e6d8faf",
+      "block": 329773048,
+      "gasUsed": "288813"
+    },
+    {
+      "label": "call PerpExchange.createMarket(SOL-USD)",
+      "hash": "0xc056f94e46dcc77f1b247eaa57d618159c45bc76a0094f2f2afb82eaf9b31131",
+      "block": 329773059,
+      "gasUsed": "288825"
+    },
+    {
+      "label": "call PerpExchange.createMarket(DEMO-USD)",
+      "hash": "0x9625399704949c4958f531c8d7c5c6681b6a857680f133740eb8a49be2ebe21a",
+      "block": 329773070,
+      "gasUsed": "288801"
+    },
+    {
+      "label": "call DemoManualOracle.set(DEMO-USD) = 100 (admin-set, NOT a real feed)",
+      "hash": "0xcf56ac03e7e30706bf1927db9b892db4e86367d920fb3f4c020d43bc88ec47da",
+      "block": 329773083,
+      "gasUsed": "66387"
+    }
+  ],
+  "startBlock": 329772806,
+  "configHash": "0x6204081b43a6cfc1b865c1da92356fedb70ebabf919acf5f131ae9a1841217ca",
+  "gitCommit": "f2baf7fe16e3f4ffdd8f5ded19833e57676228e3",
+  "modulesLocked": false,
+  "compiler": {
+    "solc": "0.8.24",
+    "viaIR": true,
+    "optimizerRuns": 200,
+    "evmVersion": "cancun"
+  },
+  "deployedAt": "2026-11-16T12:04:15.171Z"
+}
