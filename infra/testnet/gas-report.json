@@ -1,0 +1,105 @@
+{
+ "when": "2026-11-16T16:30:38.271Z",
+ "chainId": 421614,
+ "exchange": "0xeFeaB2DcAe179b5D92340D66b6dc0b8E0D5A2D2F",
+ "gasPriceWei": "20070000",
+ "ethUsd": 1824.92,
+ "rows": [
+  {
+   "op": "deposit, first time on a sub-account (registers it)",
+   "gas": 122627,
+   "note": "",
+   "usdCost": 0.0044913542093388
+  },
+  {
+   "op": "deposit, first time on a second sub-account",
+   "gas": 122627,
+   "note": "",
+   "usdCost": 0.0044913542093388
+  },
+  {
+   "op": "deposit, repeat",
+   "gas": 68276,
+   "note": "",
+   "usdCost": 0.0025006866350544
+  },
+  {
+   "op": "place GTC, new price level, empty book side",
+   "gas": 348769,
+   "note": "",
+   "usdCost": 0.012774063756243601
+  },
+  {
+   "op": "place GTC, same price level (joins the queue)",
+   "gas": 279941,
+   "note": "",
+   "usdCost": 0.0102531594894804
+  },
+  {
+   "op": "place GTC, new price level next to an existing one",
+   "gas": 337559,
+   "note": "",
+   "usdCost": 0.0123634846775196
+  },
+  {
+   "op": "place post-only, new level",
+   "gas": 323240,
+   "note": "",
+   "usdCost": 0.011839034915856
+  },
+  {
+   "op": "cancel one order (only order at its level)",
+   "gas": 79615,
+   "note": "",
+   "usdCost": 0.0029159904864060004
+  },
+  {
+   "op": "cancel one order (head of a queue of 2)",
+   "gas": 83444,
+   "note": "",
+   "usdCost": 0.0030562319933136
+  },
+  {
+   "op": "replace order (cancel + place, new level)",
+   "gas": 326738,
+   "note": "",
+   "usdCost": 0.0119671531689672
+  },
+  {
+   "op": "cancelAll with 2 resting orders",
+   "gas": 119140,
+   "note": "orders: 2",
+   "usdCost": 0.004363638843816
+  },
+  {
+   "op": "cancelAll with 8 resting orders on 8 levels",
+   "gas": 346816,
+   "note": "8 orders",
+   "usdCost": 0.0127025328962304
+  },
+  {
+   "op": "taker IOC buy fills 1 resting order fully (taker side)",
+   "gas": 311179,
+   "note": "",
+   "usdCost": 0.0113972869882476
+  },
+  {
+   "op": "taker IOC buy sweeps 3 resting orders on 3 levels",
+   "gas": 369766,
+   "note": "",
+   "usdCost": 0.013543102910210401
+  },
+  {
+   "op": "taker IOC sell closes the position against 1 resting bid",
+   "gas": 222636,
+   "note": "",
+   "usdCost": 0.0081542982846384
+  },
+  {
+   "op": "pokeFunding (DEMO-USD)",
+   "gas": 99174,
+   "note": "",
+   "usdCost": 0.0036323612447256
+  }
+ ]
+}

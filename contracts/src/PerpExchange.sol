@@ -192,6 +192,7 @@ contract PerpExchange is PerpBase {
         require(maker >= -int32(taker) && maker <= int32(taker), "maker bounds");
         takerFeeBps = taker; makerFeeBps = maker; liqFeeBps = liq; keeperShareBps = keeperShare;
         closeFactorBps = closeFactor; fullCloseNotional = fullClose;
+        emit FeesUpdated(taker, maker, liq, keeperShare, closeFactor, fullClose);
     }
 
     function setAdlMaxPremBps(uint32 bps) external onlyRole(DEFAULT_ADMIN_ROLE) { require(bps <= BPS && bps <= adlHardPremBps, "bounds"); adlMaxPremBps = bps; }

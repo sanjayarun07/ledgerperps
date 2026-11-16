@@ -37,6 +37,7 @@ contract PerpTrading is PerpBase {
         if (p.price == 0 || p.price % M.tick != 0) revert BadParam("tick");
         if (p.size == 0 || p.size % M.lot != 0 || p.size > M.maxOrderSize) revert BadParam("lot/size");
         if (p.expiry != 0 && p.expiry <= block.timestamp) revert Expired();
+        if (p.expiry > type(uint32).max) revert BadParam("expiry");
         if (p.cloid != 0) {
             if (cloidUsed[a][p.cloid]) revert DuplicateClientId();
             cloidUsed[a][p.cloid] = true;
@@ -91,7 +92,8 @@ contract PerpTrading is PerpBase {
             if ((p.tif == TIF.GTC || p.tif == TIF.PostOnly) && !truncated) { // PostOnly never crossed (checked above), so it rests
                 if (openOrders[a].length() >= MAX_OPEN_ORDERS) revert TooManyOrders();
                 uint128 rsv = _orderReserve(p.market, p.price, remaining, p.reduceOnly);
-                orders[id] = Order(a, remaining, rsv, p.price, p.expiry, 0, 0, p.cloid, p.market, p.isBuy, p.reduceOnly);
+                if (rsv > type(uint96).max) revert BadParam("reserve");
+                orders[id] = Order(a, remaining, uint96(rsv), p.market, p.isBuy, p.reduceOnly, p.price, uint32(p.expiry), 0, 0, p.cloid);
                 _reserveAdd(a, p.market, rsv);
                 _insert(id);
                 emit OrderRested(id, remaining);
@@ -169,7 +171,7 @@ contract PerpTrading is PerpBase {
         O.size -= q;
         levels[m][O.isBuy][px].total -= q;
         uint128 newRsv = _orderReserve(m, px, O.size, O.reduceOnly);
-        if (newRsv < O.reserve) { _reserveSub(maker, m, O.reserve - newRsv); O.reserve = newRsv; }
+        if (newRsv < O.reserve) { _reserveSub(maker, m, O.reserve - newRsv); O.reserve = uint96(newRsv); }
         if (O.size == 0) { O.size = 0; _removeFilled(oid); }
         emit Fill(nextTradeId++, m, oid, maker, taker, takerIsBuy, px, q, tf, mf);
     }

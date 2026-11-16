@@ -84,18 +84,21 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
         uint16 slices; uint16 done; uint16 failed; uint8 market; bool isBuy; bool reduceOnly; bool active;
     }
 
+    /// @dev Packed into 3 storage slots (was 4): slot 0 acct; slot 1 size|reserve|market|isBuy|reduceOnly (31 bytes);
+    ///      slot 2 price|expiry|prev|next|cloid (32 bytes). Order ids fit uint48 (2.8e14 orders), expiry uint32 (until year 2106),
+    ///      reserve uint96 (7.9e22 USDC); the placing path checks the narrowed fields.
     struct Order {
         bytes32 acct;
         uint128 size;
-        uint128 reserve;
-        uint64 price;
-        uint64 expiry;
-        uint64 prev;
-        uint64 next;
-        uint64 cloid;
+        uint96 reserve;
         uint8 market;
         bool isBuy;
         bool reduceOnly;
+        uint64 price;
+        uint32 expiry;
+        uint48 prev;
+        uint48 next;
+        uint64 cloid;
     }
 
     struct Level { uint128 total; uint64 head; uint64 tail; uint64 nextPrice; uint64 prevPrice; }
@@ -199,7 +202,7 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
     /// @notice SA-2: longest span one funding premium sample is allowed to represent.
     uint256 public constant MAX_SAMPLE_HOLD = 300;
     uint32 public takerFeeBps = 5;
-    int32 public makerFeeBps = 1; // negative = rebate
+    int32 public makerFeeBps = -1; // negative = rebate paid to the resting side, funded by the taker fee (|maker| <= taker is enforced in setFees)
     uint32 public liqFeeBps = 50; // of liquidated notional
     uint32 public keeperShareBps = 5000; // share of liq fee paid to liquidator
     uint32 public closeFactorBps = 5000;
@@ -211,6 +214,9 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
     event Withdraw(bytes32 indexed acct, uint256 amount);
     event InternalTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount);
     event OrderAccepted(uint64 indexed id, bytes32 indexed acct, uint8 market, bool isBuy, uint64 price, uint128 size, TIF tif, bool reduceOnly, uint64 cloid);
+    /// @dev A non-atomic batch skipped item `index` (the whole call did not revert). `reason` is the 4-byte custom-error selector.
+    event BatchItemRejected(bytes32 indexed acct, uint256 index, bytes4 reason);
+    event FeesUpdated(uint32 takerBps, int32 makerBps, uint32 liqBps, uint32 keeperShareBps, uint32 closeFactorBps, uint64 fullCloseNotional);
     event OrderRested(uint64 indexed id, uint128 remaining);
     event OrderCanceled(uint64 indexed id, CancelReason reason, uint128 remaining);
     event OrderTruncated(uint64 indexed id, uint128 remaining);
@@ -600,7 +606,7 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
             }
             L.head = id; L.tail = id; o.prev = 0; o.next = 0;
         } else {
-            orders[L.tail].next = id; o.prev = L.tail; o.next = 0; L.tail = id;
+            orders[L.tail].next = uint48(id); o.prev = uint48(L.tail); o.next = 0; L.tail = id;
         }
         L.total += o.size;
         openOrders[o.acct].add(id);

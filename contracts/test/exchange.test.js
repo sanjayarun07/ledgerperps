@@ -19,9 +19,9 @@ describe("PerpExchange", () => {
       const [a, b] = [await key(alice), await key(bob)];
       expect((await ex.positions(a, 0)).size).to.equal(-btc(0.4));
       expect((await ex.positions(b, 0)).size).to.equal(btc(0.4));
-      // notional = 20,000 USDC; taker 5bps = 10.0; maker 1bp = 2.0
+      // notional = 20,000 USDC; taker 5bps = 10.0; maker rebate 1bp = +2.0 (default schedule: taker 5, maker -1)
       expect(await ex.collateral(b)).to.equal(usd(100_000) - usd(10));
-      expect(await ex.collateral(a)).to.equal(usd(100_000) - usd(2));
+      expect(await ex.collateral(a)).to.equal(usd(100_000) + usd(2));
       const L = await ex.getLevel(0, false, px(50000));
       expect(L.total).to.equal(btc(0.6));
       // alice's reserve for the remaining 0.6 BTC resting ask = 10% of 30,000 = 3,000

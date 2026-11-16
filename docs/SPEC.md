@@ -23,10 +23,10 @@
 - Liquidation risk of a cross account: the liquidated market needs a valid mark. Any other held cross market with a stale/invalid feed is valued at `lastIndexPrice` (else its entry price) moved 20% (`STALE_FAV_BPS`) in the account's favour for PnL, margin requirement at the unmoved price. Isolated positions only ever price their own market.
 - Funding: premium = (mark−index)/index sampled as a step function on each `pokeFunding`; rate = clamp(time-weighted avg / premiumDivisor, ±cap).
   Missed intervals are applied in one step at the sampled average. Positive rate ⇒ longs pay shorts. Pays round up, receipts round toward zero; residual stays in `fundingPool`. Paused markets and oracle outages are not sampled (zero sampled time ⇒ rate 0).
-- Taker fee = ceil(notional·bps); maker fee may be a rebate (floor).
+- Taker fee = ceil(notional·bps); maker fee may be a rebate (floor). Default schedule in the current source: taker 5 bps, maker −1 bp (rebate), so the protocol keeps 4 bps of each fill. `setFees` requires `|maker| <= taker`, so a single fill can never pay out more rebate than the taker paid in.
 
 ## Worked examples (each is an assertion in `test/exchange.test.js`)
-- Partial fill: ask 1 BTC@50k, taker buys 0.4 → notional 20,000; taker fee 5 bps = 10.00; maker 1 bp = 2.00; 0.6 BTC rests; maker reserves 3,000.
+- Partial fill: ask 1 BTC@50k, taker buys 0.4 → notional 20,000; taker fee 5 bps = 10.00; maker rebate 1 bp = +2.00; 0.6 BTC rests; maker reserves 3,000.
 - Weighted entry/reversal: long 1@50k + 1@51k → basis 101,000; sell 3@52k → realized +3,000 (2·52,000 − 101,000), new short 1@52k.
 - Liquidation: 1 BTC long, 6,000 collateral @50k; mark 45.5k → equity 1,475 < MM 2,275 → 50% (close factor) moved to backstop at mark; fee 0.5% split keeper/insurance.
 - Funding: premium +1%/8 = 0.125% clamped to 0.04%/interval ⇒ 20 USDC per BTC per interval; short receives exactly what long pays.

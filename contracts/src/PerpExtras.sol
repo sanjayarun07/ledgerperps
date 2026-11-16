@@ -41,6 +41,68 @@ contract PerpExtras is PerpBase {
         return IPlacer(address(this)).placeFor(a, p);
     }
 
+    // ------------------------------------------------------------------ batch (market-maker entry points)
+    uint256 public constant MAX_BATCH = 32;
+
+    /// @notice Place up to MAX_BATCH orders for one account in one transaction. Shares the transaction base cost, the account
+    ///         registration and the signer check across orders. `atomic = true`: any failing order reverts everything.
+    ///         `atomic = false`: a failing order is skipped (id 0, event BatchItemRejected) and the rest still run, so one
+    ///         post-only cross or stale price does not kill a whole requote.
+    function batchPlace(address owner, uint8 sub, OrderParams[] calldata ps, bool atomic)
+        external nonReentrant returns (uint64[] memory ids, uint128[] memory filled)
+    {
+        bytes32 a = _register(owner, sub);
+        (ids, filled) = _placeMany(a, ps, atomic);
+    }
+
+    /// @notice Cancel several orders you are allowed to trade for. Ids that no longer exist (already filled or cancelled, the
+    ///         usual race) are skipped, not an error. Returns how many were cancelled. Allowed in every market state.
+    function batchCancel(uint64[] calldata ids) external nonReentrant returns (uint256 n) {
+        if (ids.length > MAX_BATCH) revert BadParam("batch size");
+        bytes32 last; // consecutive ids usually share an account: authorise once
+        for (uint256 i; i < ids.length; i++) {
+            Order storage o = orders[ids[i]];
+            if (o.size == 0) continue;
+            if (o.acct != last) { _authTrade(o.acct); last = o.acct; }
+            _remove(ids[i], CancelReason.User);
+            n++;
+        }
+    }
+
+    /// @notice Cancel `cancelIds` (must all belong to this account; missing ids are skipped) and then place `ps`, in one
+    ///         transaction: the standard market-maker requote. New orders take fresh queue positions.
+    function requote(address owner, uint8 sub, uint64[] calldata cancelIds, OrderParams[] calldata ps, bool atomic)
+        external nonReentrant returns (uint64[] memory ids, uint128[] memory filled)
+    {
+        if (cancelIds.length > MAX_BATCH) revert BadParam("batch size");
+        bytes32 a = _register(owner, sub);
+        _authTrade(a);
+        for (uint256 i; i < cancelIds.length; i++) {
+            Order storage o = orders[cancelIds[i]];
+            if (o.size == 0) continue;
+            if (o.acct != a) revert NotAuthorized();
+            _remove(cancelIds[i], CancelReason.Replaced);
+        }
+        (ids, filled) = _placeMany(a, ps, atomic);
+    }
+
+    function _placeMany(bytes32 a, OrderParams[] calldata ps, bool atomic) internal returns (uint64[] memory ids, uint128[] memory filled) {
+        if (ps.length > MAX_BATCH) revert BadParam("batch size");
+        ids = new uint64[](ps.length); filled = new uint128[](ps.length);
+        for (uint256 i; i < ps.length; i++) {
+            _authTradeScoped(a, ps[i].market, ps[i].size, ps[i].price);
+            if (atomic) {
+                (ids[i], filled[i]) = IPlacer(address(this)).placeFor(a, ps[i]);
+            } else {
+                try IPlacer(address(this)).placeFor(a, ps[i]) returns (uint64 id, uint128 f) {
+                    ids[i] = id; filled[i] = f;
+                } catch (bytes memory err) {
+                    emit BatchItemRejected(a, i, err.length >= 4 ? bytes4(err) : bytes4(0));
+                }
+            }
+        }
+    }
+
     /// @notice Relayed EIP-712 order. Signer must be the owner (EOA or EIP-1271 wallet) or an unexpired agent key.
     function placeSigned(address owner, uint8 sub, OrderParams calldata p, uint256 nonce, uint256 deadline, bytes calldata sig)
         external nonReentrant returns (uint64 id, uint128 filled)

@@ -45,6 +45,13 @@ It reduces obvious bugs before a paid audit; it does not replace one. Nothing he
 - `placeFor` is restricted to self-calls, so module entry points cannot be reached directly with forged accounts.
 - Insurance/bad-debt bookkeeping moves value between buckets only (ledger identity unchanged), as the existing fuzz and invariant suites assert.
 
+## New code written after this review (2026-11-16, NOT reviewed, NOT deployed)
+- `batchPlace`, `batchCancel`, `requote` in `PerpExtras`: re-use `placeFor`/`_remove` and the existing auth helpers; `requote` refuses to cancel orders of another account; non-atomic mode swallows a failing item with try/catch on the self-call (state of that item is rolled back, `BatchItemRejected` is emitted). Not covered by Slither triage above.
+- Order struct packed to 3 slots with narrowed fields (`reserve` uint96, `prev`/`next` uint48, `expiry` uint32). The placing path checks `expiry` and `reserve` before narrowing; order ids are not range-checked (2.8e14 orders needed to overflow).
+- Default maker rebate (`makerFeeBps = -1`), bounded by `|maker| <= taker` in `setFees`; rounding is taker-ceil, rebate-floor so one fill never pays out more than it takes in. New `FeesUpdated` event.
+- `MarketMakerVault` (`docs/VAULT.md`): operator-trust model, mark-based NAV. Needs its own review before any use beyond testnet.
+All of it is covered by the Hardhat suites (`batch`, `fees`, `vault` tests) but none of it has had an independent review, and none is on the live deploy #4.
+
 ## Next steps (in order)
 1. Deploy #4 with SA-1, SA-2, SA-8 and the TWAP fix (deploy #3 has SA-1 and the TWAP fix only), then re-run the suites, and confirm the live Chainlink feeds pass the stale-round check.
 2. Run the keeper with `KEEPER_FUNDING_INTERVAL_SECS=120`.
