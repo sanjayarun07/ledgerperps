@@ -88,7 +88,7 @@ describe("ABI carries the backstop phase-2 surface", () => {
   it("events and error", () => {
     for (const n of ["BackstopCfgSet", "BackstopElevated", "BackstopPlaceOpenSet", "BackstopRelaxed", "BackstopTakeFeeSet", "BackstopTaken", "BackstopUnwound"]) expect(ev(n), n).toBeTruthy();
     expect(abi.some((f) => f.type === "error" && f.name === "BackstopCap")).toBe(true);
-    expect(abi.length).toBe(199);
+    expect(abi.length).toBe(206);
   });
   it("BackstopTaken carries the taker side and the discount", () => {
     expect(ev("BackstopTaken").inputs.map((i: any) => `${i.name}:${i.type}${i.indexed ? ":idx" : ""}`)).toEqual([

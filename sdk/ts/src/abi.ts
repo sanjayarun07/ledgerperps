@@ -327,6 +327,28 @@ export const exchangeAbi = [
   },
   {
     "type": "event",
+    "name": "BatchItemRejected",
+    "inputs": [
+      {
+        "type": "bytes32",
+        "name": "acct",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "index",
+        "indexed": false
+      },
+      {
+        "type": "bytes4",
+        "name": "reason",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "CondCanceled",
     "inputs": [
       {
@@ -437,6 +459,43 @@ export const exchangeAbi = [
     "type": "event",
     "name": "EIP712DomainChanged",
     "inputs": [],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FeesUpdated",
+    "inputs": [
+      {
+        "type": "uint32",
+        "name": "takerBps",
+        "indexed": false
+      },
+      {
+        "type": "int32",
+        "name": "makerBps",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "liqBps",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "keeperShareBps",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "closeFactorBps",
+        "indexed": false
+      },
+      {
+        "type": "uint64",
+        "name": "fullCloseNotional",
+        "indexed": false
+      }
+    ],
     "anonymous": false
   },
   {
@@ -1001,6 +1060,18 @@ export const exchangeAbi = [
   {
     "type": "function",
     "name": "MAX_OPEN_ORDERS",
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "uint256",
+        "name": ""
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_SAMPLE_HOLD",
     "inputs": [],
     "outputs": [
       {
@@ -2053,28 +2124,8 @@ export const exchangeAbi = [
         "name": "size"
       },
       {
-        "type": "uint128",
+        "type": "uint96",
         "name": "reserve"
-      },
-      {
-        "type": "uint64",
-        "name": "price"
-      },
-      {
-        "type": "uint64",
-        "name": "expiry"
-      },
-      {
-        "type": "uint64",
-        "name": "prev"
-      },
-      {
-        "type": "uint64",
-        "name": "next"
-      },
-      {
-        "type": "uint64",
-        "name": "cloid"
       },
       {
         "type": "uint8",
@@ -2087,6 +2138,26 @@ export const exchangeAbi = [
       {
         "type": "bool",
         "name": "reduceOnly"
+      },
+      {
+        "type": "uint64",
+        "name": "price"
+      },
+      {
+        "type": "uint32",
+        "name": "expiry"
+      },
+      {
+        "type": "uint48",
+        "name": "prev"
+      },
+      {
+        "type": "uint48",
+        "name": "next"
+      },
+      {
+        "type": "uint64",
+        "name": "cloid"
       }
     ],
     "stateMutability": "view"
@@ -2841,6 +2912,18 @@ export const exchangeAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_BATCH",
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "uint256",
+        "name": ""
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "backstopPlace",
     "inputs": [
       {
@@ -2889,6 +2972,90 @@ export const exchangeAbi = [
       },
       {
         "type": "uint128",
+        "name": "filled"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "batchCancel",
+    "inputs": [
+      {
+        "type": "uint64[]",
+        "name": "ids"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "uint256",
+        "name": "n"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "batchPlace",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "owner"
+      },
+      {
+        "type": "uint8",
+        "name": "sub"
+      },
+      {
+        "type": "tuple[]",
+        "name": "ps",
+        "components": [
+          {
+            "type": "uint8",
+            "name": "market"
+          },
+          {
+            "type": "bool",
+            "name": "isBuy"
+          },
+          {
+            "type": "uint64",
+            "name": "price"
+          },
+          {
+            "type": "uint128",
+            "name": "size"
+          },
+          {
+            "type": "uint8",
+            "name": "tif"
+          },
+          {
+            "type": "bool",
+            "name": "reduceOnly"
+          },
+          {
+            "type": "uint64",
+            "name": "cloid"
+          },
+          {
+            "type": "uint64",
+            "name": "expiry"
+          }
+        ]
+      },
+      {
+        "type": "bool",
+        "name": "atomic"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "uint64[]",
+        "name": "ids"
+      },
+      {
+        "type": "uint128[]",
         "name": "filled"
       }
     ],
@@ -3435,6 +3602,77 @@ export const exchangeAbi = [
       },
       {
         "type": "uint128",
+        "name": "filled"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "requote",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "owner"
+      },
+      {
+        "type": "uint8",
+        "name": "sub"
+      },
+      {
+        "type": "uint64[]",
+        "name": "cancelIds"
+      },
+      {
+        "type": "tuple[]",
+        "name": "ps",
+        "components": [
+          {
+            "type": "uint8",
+            "name": "market"
+          },
+          {
+            "type": "bool",
+            "name": "isBuy"
+          },
+          {
+            "type": "uint64",
+            "name": "price"
+          },
+          {
+            "type": "uint128",
+            "name": "size"
+          },
+          {
+            "type": "uint8",
+            "name": "tif"
+          },
+          {
+            "type": "bool",
+            "name": "reduceOnly"
+          },
+          {
+            "type": "uint64",
+            "name": "cloid"
+          },
+          {
+            "type": "uint64",
+            "name": "expiry"
+          }
+        ]
+      },
+      {
+        "type": "bool",
+        "name": "atomic"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "uint64[]",
+        "name": "ids"
+      },
+      {
+        "type": "uint128[]",
         "name": "filled"
       }
     ],

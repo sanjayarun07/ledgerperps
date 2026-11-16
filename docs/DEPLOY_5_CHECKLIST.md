@@ -1,4 +1,4 @@
-# Deploy #5 checklist (not started)
+# Deploy #5 checklist (DONE 2026-11-16, exchange 0x5524Edf75e1eE356FeA9557E6f209D06ce4768E8)
 
 The contracts in `contracts/src` have moved ahead of the live deploy #4 (git tag `deploy-4-arbsepolia`). A redeploy needs the user's go-ahead; this is what must change with it.
 
@@ -16,3 +16,6 @@ The contracts in `contracts/src` have moved ahead of the live deploy #4 (git tag
 - The Rust indexer and keeper decode events, not `orders()`; check their ABI/event lists for the two new events (unknown events should be ignored, confirm).
 - `infra/testnet/testnet.config.json` (optional fee override), `contracts/deployments/arbitrumSepolia.json`, `frontend/src/generated/deployment.testnet.json`, `docs/MARKET_MAKER_GUIDE.md` fee text, README live addresses.
 - Then: `docs/TESTNET_RUNBOOK.md` section 18 (move the keeper), indexer resync, bots, re-run `smoke-testnet.js` and `measure-gas.js`.
+
+## Status
+Deployed and smoke-tested (14/14, live Chainlink included), backstop enabled, ABIs regenerated, TS and Python SDK `getOrder`/`get_order` updated and batch wrappers added, indexer reset, bots redeployed. `MarketMakerVault` is NOT deployed. The user's own keeper (started from their shell with their key) still points at deploy #3 or #4 and must be moved: `docs/TESTNET_RUNBOOK.md` section 18.

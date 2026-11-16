@@ -9,18 +9,18 @@ The keeper, indexer, frontend and bots are derived infrastructure with no author
 price-time-priority central limit order book, written in the contracts; it is not a library.
 
 ## Live testnet (Arbitrum Sepolia, chain id 421614)
-Deploy #4, 2026-11-16 (addresses change on every redeploy; the source of truth is `contracts/deployments/arbitrumSepolia.json`):
+Deploy #5, 2026-11-16 (addresses change on every redeploy; the source of truth is `contracts/deployments/arbitrumSepolia.json`):
 
 | What | Address |
 |---|---|
-| Exchange (router) | `0xeFeaB2DcAe179b5D92340D66b6dc0b8E0D5A2D2F` |
-| Test collateral (free-mint `MockUSDC`, **not real USDC**) | `0x60001F5Ff93D1bf385F68F55901C1cd139E94569` |
-| Oracle router | `0xdcf2DC2fCbDBC8f01A7e7F5C191FA57EED8fcfE7` |
+| Exchange (router) | `0x5524Edf75e1eE356FeA9557E6f209D06ce4768E8` |
+| Test collateral (free-mint `MockUSDC`, **not real USDC**) | `0x47c6642D916b3E097EDe6f543359DB5b671E28B3` |
+| Oracle router | `0x5Da99394406cDd548b92FdaBCF45db0B4F84a234` |
 
 - **Markets:** BTC-USD, ETH-USD, SOL-USD priced by Chainlink feeds with sanity bounds, and DEMO-USD, an **admin-set price** (not a real feed) used to demo liquidation and the backstop.
 - **What is real:** the oracle prices, and on-chain matching, margin, funding and liquidation logic.
 - **What is simulated:** all liquidity (our market-maker bot and a small taker), and the collateral. Treat charts and depth as a demo, not market data.
-- **Checks on deploy #4:** a 14-step live smoke test passed; backstop enabled for BTC-USD and DEMO-USD; module table still **unlocked** (admin can replace modules).
+- **Checks on deploy #5:** a 14-step live smoke test passed; backstop enabled for BTC-USD and DEMO-USD; module table still **unlocked** (admin can replace modules).
 - **Verified on testnet:** a DEMO-USD liquidation to the backstop and its Dutch auction (admin-set price, so it says nothing about real-market behaviour).
 - **Not yet verified on testnet:** liquidation on a real feed, ADL, multi-interval funding accrual with the new sampling cap, and the email-wallet signing/MFA flow end to end.
 
@@ -132,8 +132,8 @@ Watch ETH balances for the bots and keeper, and re-run steps 3 to 7 (plus `docs/
 
 **Mainnet is not covered.** It needs independent audits, a timelock and multisig, a sequencer-uptime check and more (`docs/PRODUCTION_READINESS.md`).
 
-## Built but not deployed yet
-Source and tests only, not on the live deploy #4: `batchPlace` / `batchCancel` / `requote`, a 3-slot order layout, a maker rebate (taker 5 bps, maker -1 bp) and a market-making vault. See `docs/GAS_REPORT.md`, `docs/VAULT.md` and `docs/DEPLOY_5_CHECKLIST.md`.
+## New in deploy #5
+`batchPlace` / `batchCancel` / `requote`, a 3-slot order layout (about 22k gas less per resting order, measured live), a maker rebate (taker 5 bps, maker -1 bp) and the `MarketMakerVault` contract. The vault is **source and tests only: not deployed**. See `docs/GAS_REPORT.md`, `docs/VAULT.md` and `docs/DEPLOY_5_CHECKLIST.md`.
 
 ## Docs
 | Doc | Read it for |

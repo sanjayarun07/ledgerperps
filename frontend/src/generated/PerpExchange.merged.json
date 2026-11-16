@@ -327,6 +327,28 @@
   {
     "type": "event",
     "anonymous": false,
+    "name": "BatchItemRejected",
+    "inputs": [
+      {
+        "type": "bytes32",
+        "name": "acct",
+        "indexed": true
+      },
+      {
+        "type": "uint256",
+        "name": "index",
+        "indexed": false
+      },
+      {
+        "type": "bytes4",
+        "name": "reason",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "anonymous": false,
     "name": "CondCanceled",
     "inputs": [
       {
@@ -437,6 +459,43 @@
     "anonymous": false,
     "name": "EIP712DomainChanged",
     "inputs": []
+  },
+  {
+    "type": "event",
+    "anonymous": false,
+    "name": "FeesUpdated",
+    "inputs": [
+      {
+        "type": "uint32",
+        "name": "takerBps",
+        "indexed": false
+      },
+      {
+        "type": "int32",
+        "name": "makerBps",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "liqBps",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "keeperShareBps",
+        "indexed": false
+      },
+      {
+        "type": "uint32",
+        "name": "closeFactorBps",
+        "indexed": false
+      },
+      {
+        "type": "uint64",
+        "name": "fullCloseNotional",
+        "indexed": false
+      }
+    ]
   },
   {
     "type": "event",
@@ -1016,6 +1075,20 @@
   {
     "type": "function",
     "name": "MAX_OPEN_ORDERS",
+    "constant": true,
+    "stateMutability": "view",
+    "payable": false,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "uint256",
+        "name": ""
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "MAX_SAMPLE_HOLD",
     "constant": true,
     "stateMutability": "view",
     "payable": false,
@@ -2172,28 +2245,8 @@
         "name": "size"
       },
       {
-        "type": "uint128",
+        "type": "uint96",
         "name": "reserve"
-      },
-      {
-        "type": "uint64",
-        "name": "price"
-      },
-      {
-        "type": "uint64",
-        "name": "expiry"
-      },
-      {
-        "type": "uint64",
-        "name": "prev"
-      },
-      {
-        "type": "uint64",
-        "name": "next"
-      },
-      {
-        "type": "uint64",
-        "name": "cloid"
       },
       {
         "type": "uint8",
@@ -2206,6 +2259,26 @@
       {
         "type": "bool",
         "name": "reduceOnly"
+      },
+      {
+        "type": "uint64",
+        "name": "price"
+      },
+      {
+        "type": "uint32",
+        "name": "expiry"
+      },
+      {
+        "type": "uint48",
+        "name": "prev"
+      },
+      {
+        "type": "uint48",
+        "name": "next"
+      },
+      {
+        "type": "uint64",
+        "name": "cloid"
       }
     ]
   },
@@ -3008,6 +3081,20 @@
   },
   {
     "type": "function",
+    "name": "MAX_BATCH",
+    "constant": true,
+    "stateMutability": "view",
+    "payable": false,
+    "inputs": [],
+    "outputs": [
+      {
+        "type": "uint256",
+        "name": ""
+      }
+    ]
+  },
+  {
+    "type": "function",
     "name": "backstopPlace",
     "constant": false,
     "payable": false,
@@ -3058,6 +3145,92 @@
       },
       {
         "type": "uint128",
+        "name": "filled"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "batchCancel",
+    "constant": false,
+    "payable": false,
+    "inputs": [
+      {
+        "type": "uint64[]",
+        "name": "ids"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "uint256",
+        "name": "n"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "batchPlace",
+    "constant": false,
+    "payable": false,
+    "inputs": [
+      {
+        "type": "address",
+        "name": "owner"
+      },
+      {
+        "type": "uint8",
+        "name": "sub"
+      },
+      {
+        "type": "tuple[]",
+        "name": "ps",
+        "components": [
+          {
+            "type": "uint8",
+            "name": "market"
+          },
+          {
+            "type": "bool",
+            "name": "isBuy"
+          },
+          {
+            "type": "uint64",
+            "name": "price"
+          },
+          {
+            "type": "uint128",
+            "name": "size"
+          },
+          {
+            "type": "uint8",
+            "name": "tif"
+          },
+          {
+            "type": "bool",
+            "name": "reduceOnly"
+          },
+          {
+            "type": "uint64",
+            "name": "cloid"
+          },
+          {
+            "type": "uint64",
+            "name": "expiry"
+          }
+        ]
+      },
+      {
+        "type": "bool",
+        "name": "atomic"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "uint64[]",
+        "name": "ids"
+      },
+      {
+        "type": "uint128[]",
         "name": "filled"
       }
     ]
@@ -3621,6 +3794,78 @@
       },
       {
         "type": "uint128",
+        "name": "filled"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "requote",
+    "constant": false,
+    "payable": false,
+    "inputs": [
+      {
+        "type": "address",
+        "name": "owner"
+      },
+      {
+        "type": "uint8",
+        "name": "sub"
+      },
+      {
+        "type": "uint64[]",
+        "name": "cancelIds"
+      },
+      {
+        "type": "tuple[]",
+        "name": "ps",
+        "components": [
+          {
+            "type": "uint8",
+            "name": "market"
+          },
+          {
+            "type": "bool",
+            "name": "isBuy"
+          },
+          {
+            "type": "uint64",
+            "name": "price"
+          },
+          {
+            "type": "uint128",
+            "name": "size"
+          },
+          {
+            "type": "uint8",
+            "name": "tif"
+          },
+          {
+            "type": "bool",
+            "name": "reduceOnly"
+          },
+          {
+            "type": "uint64",
+            "name": "cloid"
+          },
+          {
+            "type": "uint64",
+            "name": "expiry"
+          }
+        ]
+      },
+      {
+        "type": "bool",
+        "name": "atomic"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "uint64[]",
+        "name": "ids"
+      },
+      {
+        "type": "uint128[]",
         "name": "filled"
       }
     ]

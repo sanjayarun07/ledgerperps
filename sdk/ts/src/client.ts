@@ -296,6 +296,20 @@ export class PerpClient {
   async cancelAll(o: TxOptions = {}): Promise<TxResult> {
     return (await this.send("cancelAll", [this.owner, o.sub ?? this.defaultSub], o)).result;
   }
+  /** Place up to 32 orders in one transaction. `atomic=false` skips a failing order (see BatchItemRejected) instead of reverting all. */
+  async batchPlace(orders: OrderInput[], opts: PlaceOptions & { atomic?: boolean } = {}): Promise<TxResult> {
+    const ps = await Promise.all(orders.map((o) => this.buildParams(o, opts)));
+    return (await this.send("batchPlace", [this.owner, opts.sub ?? this.defaultSub, ps, opts.atomic ?? true], opts)).result;
+  }
+  /** Cancel several orders in one transaction; ids that are already gone are skipped. */
+  async batchCancel(orderIds: bigint[], o: Pick<TxOptions, "gas"> = {}): Promise<TxResult> {
+    return (await this.send("batchCancel", [orderIds], o)).result;
+  }
+  /** Market-maker requote: cancel `cancelIds` and place `orders` in one transaction. */
+  async requote(cancelIds: bigint[], orders: OrderInput[], opts: PlaceOptions & { atomic?: boolean } = {}): Promise<TxResult> {
+    const ps = await Promise.all(orders.map((o) => this.buildParams(o, opts)));
+    return (await this.send("requote", [this.owner, opts.sub ?? this.defaultSub, cancelIds, ps, opts.atomic ?? true], opts)).result;
+  }
   /** Atomic cancel + new order (loses time priority). */
   async replaceOrder(oldId: bigint, o: OrderInput, opts: PlaceOptions = {}): Promise<PlaceResult> {
     const p = await this.buildParams(o, opts);
@@ -650,7 +664,8 @@ export class PerpClient {
   async getOrder(id: bigint): Promise<RestingOrder | undefined> {
     const r = await this.read<readonly any[]>("orders", [id]);
     if (r[1] === 0n) return undefined;
-    return { id, acct: r[0], size: r[1], reserve: r[2], price: r[3], expiry: r[4], cloid: r[7], market: Number(r[8]), isBuy: r[9], reduceOnly: r[10] };
+    // tuple order since deploy #5: acct, size, reserve, market, isBuy, reduceOnly, price, expiry, prev, next, cloid
+    return { id, acct: r[0], size: r[1], reserve: r[2], market: Number(r[3]), isBuy: r[4], reduceOnly: r[5], price: r[6], expiry: BigInt(r[7]), cloid: r[10] };
   }
   async openOrders(sub: number = this.defaultSub, owner: Address = this.owner): Promise<RestingOrder[]> {
     const ids = await this.read<readonly bigint[]>("openOrderIds", [this.acct(sub, owner)]);

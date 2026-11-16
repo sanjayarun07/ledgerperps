@@ -183,6 +183,26 @@ class PerpClient:
     def cancel_all(self, sub: Optional[int] = None):
         return self._send(self.ex.functions.cancelAll(self.owner, self.sub if sub is None else sub))
 
+    def batch_place(self, orders: List[OrderParams], sub: Optional[int] = None, atomic: bool = True, validate: bool = True):
+        """Place up to 32 orders in one transaction. atomic=False skips a failing order (BatchItemRejected) instead of reverting all."""
+        if validate:
+            for p in orders:
+                self._validate(p)
+        s = self.sub if sub is None else sub
+        return self._send(self.ex.functions.batchPlace(self.owner, s, [p.as_tuple() for p in orders], atomic))
+
+    def batch_cancel(self, order_ids: List[int]):
+        """Cancel several orders in one transaction; ids that are already gone are skipped."""
+        return self._send(self.ex.functions.batchCancel(order_ids))
+
+    def requote(self, cancel_ids: List[int], orders: List[OrderParams], sub: Optional[int] = None, atomic: bool = True, validate: bool = True):
+        """Market-maker requote: cancel cancel_ids and place orders in one transaction."""
+        if validate:
+            for p in orders:
+                self._validate(p)
+        s = self.sub if sub is None else sub
+        return self._send(self.ex.functions.requote(self.owner, s, cancel_ids, [p.as_tuple() for p in orders], atomic))
+
     def replace_order(self, old_id: int, p: OrderParams, validate: bool = True) -> PlaceResult:
         if validate:
             self._validate(p)
@@ -381,7 +401,8 @@ class PerpClient:
         r = self._call(self.ex.functions.orders(order_id))
         if r[1] == 0:
             return None
-        return RestingOrder(order_id, bytes(r[0]), int(r[1]), int(r[3]), int(r[4]), int(r[7]), int(r[8]), bool(r[9]), bool(r[10]))
+        # tuple order since deploy #5: acct, size, reserve, market, isBuy, reduceOnly, price, expiry, prev, next, cloid
+        return RestingOrder(order_id, bytes(r[0]), int(r[1]), int(r[6]), int(r[7]), int(r[10]), int(r[3]), bool(r[4]), bool(r[5]))
 
     def open_orders(self, sub: Optional[int] = None) -> List[RestingOrder]:
         ids = self._call(self.ex.functions.openOrderIds(self.acct(sub)))

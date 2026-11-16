@@ -52,3 +52,26 @@ Measured in the Hardhat suite (gas there excludes the Arbitrum L1-data component
 What was not changed, and is the next target if gas still matters: each resting order also pays for the `EnumerableSet` bookkeeping in `openOrders[acct]` (two fresh slots per order). Replacing it with a counter plus an indexer-side list would remove about 40k per order, at the cost of `cancelAll` needing the ids supplied by the caller.
 
 Re-measure with `CONFIRM_MEASURE_GAS=yes npx hardhat --config hardhat.testnet.config.js run scripts/testnet/measure-gas.js --network arbitrumSepolia` after the redeploy (use `GAS_REPORT_FILE=gas-report.deploy5.json` to keep both reports).
+
+## Measured live on deploy #5 (3-slot orders), same script, same market
+
+| Operation | Deploy #4 | Deploy #5 | Change |
+|---|---:|---:|---:|
+| deposit, first time on a sub-account (registers it) | 122,627 | 122,627 | +0.0% |
+| deposit, first time on a second sub-account | 122,627 | 122,627 | +0.0% |
+| deposit, repeat | 68,276 | 68,276 | +0.0% |
+| place GTC, new price level, empty book side | 348,769 | 326,379 | -6.4% |
+| place GTC, same price level (joins the queue) | 279,941 | 257,515 | -8.0% |
+| place GTC, new price level next to an existing one | 337,559 | 315,169 | -6.6% |
+| place post-only, new level | 323,240 | 300,850 | -6.9% |
+| cancel one order (only order at its level) | 79,615 | 75,489 | -5.2% |
+| cancel one order (head of a queue of 2) | 83,444 | 79,270 | -5.0% |
+| replace order (cancel + place, new level) | 326,738 | 303,969 | -7.0% |
+| cancelAll with 2 resting orders | 119,140 | 110,928 | -6.9% |
+| cancelAll with 8 resting orders on 8 levels | 346,816 | 313,827 | -9.5% |
+| taker IOC buy fills 1 resting order fully (taker side) | 311,179 | 310,883 | -0.1% |
+| taker IOC buy sweeps 3 resting orders on 3 levels | 369,766 | 357,457 | -3.3% |
+| taker IOC sell closes the position against 1 resting bid | 222,636 | 218,560 | -1.8% |
+| pokeFunding (DEMO-USD) | 99,174 | 99,174 | +0.0% |
+
+Place and cancel dropped as predicted by the Hardhat numbers (about 22k per new resting order). Batch calls were not part of this live run (the script measures single calls); their saving is the shared per-transaction cost, shown in the Hardhat table above. Raw data: `infra/testnet/gas-report.deploy5.json`.
