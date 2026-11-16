@@ -158,17 +158,21 @@ export class MarketMakerBot {
       this.stats.quoting = true;
       this.stats.lastReason = undefined;
       if (actions.length === 0) return;
-      // cancels first (frees margin and removes anything that could sit across a refreshed opposite quote)
-      for (const a of actions) if (a.kind === "cancel") await this.doCancel(a, existing);
-      // stale replacements: cancel the old one, then place fresh (two steps keep PostOnly failures from leaving stale quotes)
-      for (const a of actions) {
-        if (a.kind !== "replace") continue;
-        const old = existing.find((e) => e.id === a.id)!;
-        await this.doCancel({ kind: "cancel", id: a.id, from: old.from, reason: a.reason }, existing);
-      }
-      for (const a of actions) {
-        if (a.kind === "place") await this.doPlace(a.to);
-        else if (a.kind === "replace") await this.doPlace(a.to, true);
+      if (this.batch && (await this.applyBatched(actions, existing))) {
+        // done in one requote per subaccount
+      } else {
+        // cancels first (frees margin and removes anything that could sit across a refreshed opposite quote)
+        for (const a of actions) if (a.kind === "cancel") await this.doCancel(a, existing);
+        // stale replacements: cancel the old one, then place fresh (two steps keep PostOnly failures from leaving stale quotes)
+        for (const a of actions) {
+          if (a.kind !== "replace") continue;
+          const old = existing.find((e) => e.id === a.id)!;
+          await this.doCancel({ kind: "cancel", id: a.id, from: old.from, reason: a.reason }, existing);
+        }
+        for (const a of actions) {
+          if (a.kind === "place") await this.doPlace(a.to);
+          else if (a.kind === "replace") await this.doPlace(a.to, true);
+        }
       }
       this.log(
         `mid=${fromPrice(mid)} net=${fromSize(net)} desired=${desired.length} actions: ` +
@@ -186,6 +190,48 @@ export class MarketMakerBot {
         }
       }
     }
+  }
+
+  /** Contract batch calls (deploy #5+): one `requote` transaction per subaccount instead of one per cancel and per place. Set MM_BATCH=no to disable. */
+  private batch = process.env.MM_BATCH !== "no";
+
+  /** Returns false when the exchange has no batch calls (older deployment), so the caller falls back to single orders. */
+  private async applyBatched(actions: Action[], existing: ExistingQuote[]): Promise<boolean> {
+    const o = this.o;
+    const bySub = new Map<number, { cancel: bigint[]; place: DesiredQuote[]; replaced: number; placed: number }>();
+    const slot = (sub: number) => { let v = bySub.get(sub); if (!v) { v = { cancel: [], place: [], replaced: 0, placed: 0 }; bySub.set(sub, v); } return v; };
+    for (const a of actions) {
+      if (a.kind === "cancel") {
+        const e = existing.find((x) => x.id === a.id); if (e) slot(this.subFor(e.from)).cancel.push(a.id);
+      } else if (a.kind === "replace") {
+        const e = existing.find((x) => x.id === a.id); if (e) slot(this.subFor(e.from)).cancel.push(a.id);
+        slot(this.subFor(a.to.from)).place.push(a.to); slot(this.subFor(a.to.from)).replaced++;
+      } else {
+        slot(this.subFor(a.to.from)).place.push(a.to); slot(this.subFor(a.to.from)).placed++;
+      }
+    }
+    const expiry = (await this.client.chainTime()) + BigInt(o.quoteTtlSec);
+    for (const [sub, v] of bySub) {
+      // same cross guard as doPlace, evaluated against the book as it will be after our cancels (we only ever cancel our own quotes)
+      const orders = [];
+      for (const q of v.place) {
+        const top = await this.client.bestPrice(o.market, !q.isBuy);
+        if (top !== 0n && (q.isBuy ? top <= q.price : top >= q.price)) { this.log(`skip ${q.isBuy ? "bid" : "ask"} ${fromPrice(q.price)}: would cross best ${q.isBuy ? "ask" : "bid"} ${fromPrice(top)}`); continue; }
+        orders.push({ market: o.market, isBuy: q.isBuy, price: q.price, size: q.size, tif: o.tif ?? Tif.GTC, reduceOnly: q.reduceOnly, cloid: newCloid(), expiry });
+      }
+      for (let i = 0; i < Math.max(v.cancel.length, orders.length); i += 32) {
+        const cancelIds = v.cancel.slice(i, i + 32), chunk = orders.slice(i, i + 32);
+        try {
+          await this.client.requote(cancelIds, chunk, { sub, atomic: false });
+        } catch (e) {
+          if (/unknown selector/i.test((e as Error).message ?? "")) { this.log("exchange has no batch calls: falling back to single orders"); this.batch = false; return false; }
+          throw e;
+        }
+        for (const id of cancelIds) this.placedAt.delete(id);
+      }
+      this.stats.cancelled += v.cancel.length; this.stats.replaced += v.replaced; this.stats.placed += v.placed;
+    }
+    return true;
   }
 
   private async doCancel(a: Extract<Action, { kind: "cancel" }>, existing: ExistingQuote[]) {

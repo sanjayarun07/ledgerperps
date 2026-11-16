@@ -74,14 +74,11 @@ export default function MakerConsole() {
         const st = await send({ label: `Cancel all orders (subaccount ${w.sub})`, kind: "cancel", functionName: "cancelAll", args: [w.address, w.sub], trading: true });
         if (st !== "executed") { setNote("Stopped: the cancel did not go through."); return; }
       }
-      let ok = 0;
-      for (const q of plan) {
-        const p = buildOrderParams({ market, isBuy: q.isBuy, price: q.price, size: sizeRaw, type: "limit", tif: post ? "PostOnly" : "GTC", reduceOnly: false, cloid: BigInt(Math.floor(Math.random() * 2 ** 52) + 1), expiry: expiry() });
-        const st = await send({ label: `${post ? "Post-only" : "Limit"} ${q.isBuy ? "buy" : "sell"} ${fmtSize(sizeRaw)} ${base} @ ${fmtPrice(q.price)} (level ${q.level})`, kind: "place", unit: base, functionName: "placeOrder", args: [w.address, w.sub, p], trading: true });
-        if (st !== "executed") { setNote(`Stopped after ${ok} of ${plan.length} orders: the next one did not go through (see the notification).`); return; }
-        ok++;
-      }
-      setNote(`Placed ${ok} orders.`);
+      // one transaction for the whole ladder (batchPlace, deploy #5+): one wallet prompt, shared gas. atomic=false skips a
+      // failing order (e.g. a post-only that would cross) instead of reverting the lot.
+      const params = plan.map((q) => buildOrderParams({ market, isBuy: q.isBuy, price: q.price, size: sizeRaw, type: "limit", tif: post ? "PostOnly" : "GTC", reduceOnly: false, cloid: BigInt(Math.floor(Math.random() * 2 ** 52) + 1), expiry: expiry() }));
+      const st = await send({ label: `Place ${plan.length} ${post ? "post-only" : "limit"} orders (${fmtSize(sizeRaw)} ${base} each, one transaction)`, kind: "place", unit: base, functionName: "batchPlace", args: [w.address, w.sub, params, false], trading: true });
+      setNote(st === "executed" ? `Sent ${plan.length} orders in one transaction. Orders that were rejected (for example a post-only that would cross) are skipped; check the list below.` : "The batch did not go through (see the notification).");
     } finally { setBusy(false); }
   }
 
