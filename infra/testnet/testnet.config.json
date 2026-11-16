@@ -111,7 +111,7 @@
         "tick": "100000",
         "lot": "10000",
         "maxOrderSize": "100000000",
-        "maxOI": "1000000000",
+        "maxOI": "10000000000",
         "minNotional": "10000000",
         "maxAge": 600,
         "bandBps": 500,

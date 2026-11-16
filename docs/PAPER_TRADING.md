@@ -10,7 +10,7 @@
 ## Why a deploy #3 is needed first
 The bot needs about $91,000 of collateral at full depth (`preflight` computes it). The deployed exchange uses Circle test USDC, which cannot be minted (faucet only). `USE_MOCK_USDC=yes` at deploy time gives a free-mint test token. Deploy #3 also carries the TWAP fix and the SA-1 market-bounds fix. See `docs/TESTNET_RUNBOOK.md` section 17 for the deploy steps, adding `USE_MOCK_USDC=yes`.
 
-Also consider raising BTC `maxOI` (now 10 BTC, about $645k) with `setMarketParams` if you want takers to be able to use the full depth.
+BTC `maxOI` is raised to 100 BTC (about $6.4M) in `infra/testnet/testnet.config.json` for deploy #3 (it was 10 BTC, too small for the full depth). On an existing deployment use `setMarketParams`.
 
 ## Steps (after deploy #3, in `contracts/` unless noted)
 1. Mint test collateral to the bot address (dry run first):
