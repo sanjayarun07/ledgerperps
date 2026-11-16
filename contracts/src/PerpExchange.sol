@@ -151,6 +151,7 @@ contract PerpExchange is PerpBase {
     function createMarket(MarketConfig calldata c, Tier[] calldata tiers) external onlyRole(DEFAULT_ADMIN_ROLE) returns (uint8 id) {
         require(marketCount < MAX_MARKETS, "max markets");
         require(c.tick > 0 && c.lot > 0 && c.fundingInterval > 0 && c.premiumDivisor > 0, "bad cfg");
+        require(c.maxAge >= 5 && c.bandBps <= 2000 && c.maxSpreadBps <= 1000 && c.fundingCap <= 5e9, "bounds"); // same bounds as setMarketParams (SA-1)
         require(tiers.length > 0 && tiers.length <= 4, "tiers");
         id = marketCount++;
         Market storage M = markets[id];

@@ -7,6 +7,10 @@
  *   tsx src/testnet-mm.ts setup     approve + deposit test USDC into sub 0         (dry run unless CONFIRM_MM_SETUP=yes)
  *   tsx src/testnet-mm.ts run       quote loop; Ctrl-C pulls all quotes             (sends transactions with the bot key; needs the bot address funded with ETH)
  *   tsx src/testnet-mm.ts stop      cancel all quotes and withdraw free collateral  (dry run unless CONFIRM_MM_STOP=yes)
+ * Thick BTC book (DEPTH=thick; see src/depth.ts): a 3-tier ladder, each tier on its own pair of subaccounts (DEPTH_SUB_BASE, default 4).
+ *   tsx src/testnet-mm.ts preflight  read-only: oracle freshness and accuracy, ladder geometry, collateral, ETH, open-interest cap; exits 1 on errors
+ *   tsx src/testnet-mm.ts fanout     move collateral from sub 0 into the tier subaccounts (dry run unless CONFIRM_MM_FANOUT=yes)
+ *   DEPTH=thick DEPTH_SCALE=0.5 tsx src/testnet-mm.ts run   (run refuses to start when preflight has errors unless DEPTH_SKIP_PREFLIGHT=yes)
  * The key is read from MM_PRIVATE_KEY or bots/.env.mm-testnet and is never printed. Never use the deployer key here.
  */
 import fs from "node:fs";
@@ -19,6 +23,7 @@ import { MarketMakerBot } from "./mm.js";
 import type { QuoteConfig } from "./quotes.js";
 import { sleep, ts } from "./config.js";
 import { HyperliquidVenue } from "./hyperliquid.js";
+import { THICK_BTC, buildDepthPlan, hasErrors, preflight, requiredCollateral, type DepthTier } from "./depth.js";
 import { Hedger, HyperliquidRefVenue, SimulatedVenue, toRaw, type HedgeConfig, type HedgeVenue } from "./hedge.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -61,6 +66,43 @@ async function client() {
 const marketNames = (d: { marketIds: Record<string, number> }) =>
   (process.env.MARKETS ?? "BTC-USD,ETH-USD,SOL-USD").split(",").map((s) => s.trim()).filter((n) => n in d.marketIds);
 
+
+const depthOn = () => (process.env.DEPTH ?? "off") === "thick";
+
+/** Independent spot price for the accuracy check (read-only public endpoint; failure just skips the check). */
+async function refPriceUsd(): Promise<number | undefined> {
+  try {
+    const r = await fetch("https://api.coinbase.com/v2/prices/BTC-USD/spot", { signal: AbortSignal.timeout(5000) });
+    const v = Number(((await r.json()) as { data?: { amount?: string } }).data?.amount);
+    return v > 0 ? v : undefined;
+  } catch { return undefined; }
+}
+
+async function depthContext(c: PerpClient, d: { marketIds: Record<string, number> }) {
+  const market = d.marketIds["BTC-USD"];
+  if (market === undefined) throw new Error("deployment has no BTC-USD market");
+  const cfg = await c.marketConfig(market, true);
+  const oracle = await c.oracleStatus(market);
+  const plan = buildDepthPlan({ tiers: THICK_BTC, subBase: num("DEPTH_SUB_BASE", 4), px: oracle.price, lot: cfg.lot, minNotional: cfg.minNotional, maxOrderSize: cfg.maxOrderSize, scale: num("DEPTH_SCALE", 1) });
+  const subs = [0, ...plan.flatMap((t: DepthTier) => [t.bidSub, t.askSub])];
+  let available = 0n;
+  for (const sb of subs) available += (await c.accountState(sb)).available;
+  return { market, cfg, oracle, plan, subs, available };
+}
+
+async function runPreflight(c: PerpClient, d: { marketIds: Record<string, number> }): Promise<boolean> {
+  const x = await depthContext(c, d);
+  const checks = preflight({
+    market: x.cfg, plan: x.plan, px: x.oracle.price, oracle: { fresh: x.oracle.fresh, ageSec: Number(x.oracle.ageSec) }, refPriceUsd: await refPriceUsd(),
+    ethBalance: await c.publicClient.getBalance({ address: c.owner }), availableUsdc: x.available,
+    ethPerTx: Number((await c.publicClient.getGasPrice()) * 350_000n) / 1e18, // live gas price x ~350k gas per order transaction
+  });
+  for (const k of checks) console.log(`  [${k.level.toUpperCase().padEnd(5)}] ${k.msg}`);
+  const bad = hasErrors(checks);
+  console.log(bad ? "PREFLIGHT FAILED" : "PREFLIGHT OK (simulated liquidity on test USDC; nothing here is real market depth)");
+  return !bad;
+}
+
 async function main() {
   const cmd = process.argv[2];
   if (cmd === "keygen") {
@@ -94,7 +136,41 @@ async function main() {
     console.log("deposit tx", (await c.deposit(amt)).hash);
     return;
   }
+  if (cmd === "preflight") {
+    if (!(await runPreflight(c, d))) process.exit(1);
+    return;
+  }
+  if (cmd === "fanout") {
+    const x = await depthContext(c, d);
+    const have = new Map<number, bigint>();
+    for (const sb of x.subs) have.set(sb, (await c.accountState(sb)).available);
+    const moves: { sub: number; amt: bigint }[] = [];
+    for (const t of x.plan) {
+      const need = requiredCollateral(x.cfg, [t], x.oracle.price).total;
+      for (const sb of [t.bidSub, t.askSub]) { const want = need / 2n; const cur = have.get(sb) ?? 0n; if (cur < want) moves.push({ sub: sb, amt: want - cur }); }
+    }
+    const total = moves.reduce((a, m) => a + m.amt, 0n);
+    for (const m of moves) console.log(`  sub 0 -> sub ${m.sub}: ${fromUsdc(m.amt)} test USDC`);
+    console.log(`total ${fromUsdc(total)}; sub 0 has ${fromUsdc(have.get(0) ?? 0n)} free`);
+    if (total > (have.get(0) ?? 0n)) throw new Error("sub 0 has less free collateral than the fan-out needs: deposit more (setup) or lower DEPTH_SCALE");
+    if (process.env.CONFIRM_MM_FANOUT !== "yes") return console.log("DRY RUN: set CONFIRM_MM_FANOUT=yes to send the transfers");
+    for (const m of moves) console.log(`transfer to sub ${m.sub}`, (await c.transferInternal(0, m.sub, m.amt)).hash);
+    return;
+  }
   if (cmd === "stop") {
+    if (depthOn()) {
+      const x = await depthContext(c, d);
+      const confirm = process.env.CONFIRM_MM_STOP === "yes";
+      for (const sb of x.subs.filter((v) => v !== 0)) {
+        const n = (await c.openOrders(sb)).length;
+        console.log(`sub ${sb}: ${n} open orders`);
+        if (!confirm) continue;
+        if (n) console.log(`  cancelAll tx`, (await c.cancelAll({ sub: sb })).hash);
+        const av = (await c.accountState(sb)).available;
+        if (av > 0n) console.log(`  sweep ${fromUsdc(av)} to sub 0`, (await c.transferInternal(sb, 0, av)).hash);
+      }
+      if (!confirm) console.log("DRY RUN: set CONFIRM_MM_STOP=yes to cancel all tier orders and sweep collateral back to sub 0");
+    }
     const open = await c.openOrders(0);
     console.log(`open orders: ${open.length}`);
     if (process.env.CONFIRM_MM_STOP !== "yes") return console.log("DRY RUN: set CONFIRM_MM_STOP=yes to cancel all and withdraw free collateral");
@@ -103,7 +179,7 @@ async function main() {
     if (w > 0n) console.log("withdraw tx", (await c.withdraw(w, { sub: 0 })).hash);
     return;
   }
-  if (cmd !== "run") throw new Error("usage: keygen | status | setup | run | stop");
+  if (cmd !== "run") throw new Error("usage: keygen | status | setup | preflight | fanout | run | stop");
 
   const levelUsd = num("LEVEL_NOTIONAL_USD", 12);
   const maxInvUsd = num("MAX_INV_NOTIONAL_USD", 40);
@@ -122,7 +198,18 @@ async function main() {
   });
   const bots: MarketMakerBot[] = [];
   const takerSizes = new Map<number, bigint>();
-  for (const n of names) {
+  if (depthOn()) {
+    if (process.env.DEPTH_SKIP_PREFLIGHT !== "yes" && !(await runPreflight(c, d))) throw new Error("preflight failed: fix the errors above (or DEPTH_SKIP_PREFLIGHT=yes to override)");
+    const x = await depthContext(c, d);
+    for (const t of x.plan) {
+      bots.push(new MarketMakerBot(c, {
+        name: `tmm-${t.tier.name}`, market: x.market, marketName: "BTC-USD", quote: t.quote, bidSub: t.bidSub, askSub: t.askSub,
+        oracleStaleSec: num("ORACLE_STALE_SEC", 3600), quoteTtlSec: num("QUOTE_TTL_SEC", 3600), minAvailable: toUsdc(num("MIN_AVAILABLE_USD", 2)), tif: Tif.GTC,
+      }));
+    }
+    takerSizes.set(x.market, x.plan[0]!.quote.levelSize);
+  }
+  for (const n of depthOn() ? [] : names) {
     const market = d.marketIds[n]!;
     const cfg = await c.marketConfig(market, true);
     const px = await c.markPrice(market);
@@ -141,14 +228,14 @@ async function main() {
       quoteTtlSec: num("QUOTE_TTL_SEC", 900), minAvailable: toUsdc(num("MIN_AVAILABLE_USD", 2)), tif: Tif.GTC,
     }));
   }
-  console.log(`${ts()} TESTNET market-maker (simulated liquidity, test USDC) quoting ${names.join(", ")} from ${c.owner}; Ctrl-C pulls quotes`);
+  console.log(`${ts()} TESTNET market-maker (simulated liquidity, test USDC) quoting ${depthOn() ? `BTC-USD thick ladder (${bots.length} tiers)` : names.join(", ")} from ${c.owner}; Ctrl-C pulls quotes`);
   let stop = false;
   process.once("SIGINT", () => (stop = true));
   process.once("SIGTERM", () => (stop = true));
-  const interval = num("INTERVAL_MS", 20_000);
+  const interval = num("INTERVAL_MS", depthOn() ? 15_000 : 20_000);
   let last = 0;
   // Small taker (sub-account 1): every TAKER_EVERY_SEC it crosses ONE resting quote (IOC, one level) so the chart, trade history and 24h stats have real trades. 0 disables it.
-  const takerEvery = num("TAKER_EVERY_SEC", 45) * 1000; let lastTake = Date.now(), takeN = 0;
+  const takerEvery = num("TAKER_EVERY_SEC", depthOn() ? 0 : 45) * 1000; let lastTake = Date.now(), takeN = 0;
   const TAKER_SUB = 1;
   async function takerTick() {
     const ids = [...takerSizes.keys()]; const market = ids[takeN % ids.length]!; const isBuy = Math.floor(takeN / ids.length) % 2 === 0; takeN++;
