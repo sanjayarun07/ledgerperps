@@ -11,6 +11,7 @@
     "mm": "tsx src/run-mm.ts",
     "oracle": "tsx src/oracle-driver.ts",
     "taker": "tsx src/taker.ts",
+    "testnet-taker": "tsx src/testnet-taker.ts",
     "status": "tsx src/status.ts",
     "verify": "tsx src/verify.ts",
     "backstop-taker": "tsx src/backstop-taker.ts",

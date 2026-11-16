@@ -1,67 +1,198 @@
 {
-  "ranAt": "2026-11-14T18:52:42.959Z",
+  "ranAt": "2026-11-16T14:17:17.767Z",
   "network": "arbitrumSepolia",
   "chainId": 421614,
-  "exchange": "0x67486Aa612c7395cD85fd0114990555aBE46c112",
+  "exchange": "0x0FCBB4f62A227fD37dE9368A169A4706eCf87D61",
   "demoMarketId": 3,
   "demoPriceIsAdminSet": true,
   "keeperAndShortSide": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29",
-  "longSide": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29 sub1",
-  "gitCommit": "219e16c2006ad9c6cc9d2122c6c67ac7908394b2",
-  "configHash": "0x84626edafa31f7f6afac325b1f1af908fb33b8a6965ea9c199a84e547c496866",
+  "longSide": "0x50C05D162dF2EFc2f2b9a24708bE0BcDAf8d6B29 sub7",
+  "gitCommit": "a53d9f6c9c78f2d77af85936ce68456488ff36d2",
+  "configHash": "0x6204081b43a6cfc1b865c1da92356fedb70ebabf919acf5f131ae9a1841217ca",
   "summary": {
-    "ok": 6,
-    "failed": 1,
-    "skipped": 1,
-    "txCount": 4,
-    "totalGas": "359054"
+    "ok": 16,
+    "failed": 0,
+    "skipped": 0,
+    "txCount": 13,
+    "totalGas": "1785957"
   },
   "stages": [
     {
       "name": "preflight (read-only)",
       "status": "ok",
       "demoPriceUsdc": "100.0000",
-      "demoPriceAgeSecs": 128,
+      "demoPriceAgeSecs": 97,
       "softNotionalUsdc": "10.0000",
       "dwell": 30,
       "ramp": 120,
       "maxAge": 600,
       "maxDiscBps": 150,
-      "usdcBalanceKeeper": "29.8567",
-      "ethBalanceKeeper": "0.017720717552877428",
+      "usdcBalanceKeeper": "989.9546",
+      "ethBalanceKeeper": "0.177433100627519673",
       "usdcNeededFromKeeper": "12.0000",
+      "longAccountEquityUsdc": "0.0000",
       "state": {
         "label": "before",
         "mark": "100.0000",
-        "backstopSize": "0.5000",
-        "inventoryNotionalUsdc": "50.0000",
+        "backstopSize": "0.0000",
+        "inventoryNotionalUsdc": "0.0000",
         "softNotionalUsdc": "10.0000",
-        "elevatedSince": 1794681730,
-        "backstopEquityUsdc": "5.0000",
+        "elevatedSince": 0,
+        "backstopEquityUsdc": "0.0000",
         "unresolvedBadDebtUsdc": "0.0000",
         "auction": {
-          "active": true,
+          "active": false,
           "takerSells": false,
-          "price": "98.5000",
-          "discBps": "150",
-          "size": "0.5000"
+          "price": "0.0000",
+          "discBps": "0",
+          "size": "0.0000"
+        }
+      }
+    },
+    {
+      "name": "set demo price to 100",
+      "status": "ok",
+      "hash": "0xffe6cccee1a9715935e9a13266cb505333554b1e51e0df112f80e73798980f5a",
+      "block": 329801967,
+      "gasUsed": "29387",
+      "effGasPriceWei": "20126001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0xffe6cccee1a9715935e9a13266cb505333554b1e51e0df112f80e73798980f5a",
+      "price": "100.0000"
+    },
+    {
+      "name": "approve USDC (keeper/short side)",
+      "status": "ok",
+      "note": "allowance sufficient"
+    },
+    {
+      "name": "deposit short side",
+      "status": "ok",
+      "hash": "0xebb1aa6478f8722ebc6334161cf825503b93e6b128607fc1fdc28ce841e71124",
+      "block": 329801979,
+      "gasUsed": "68242",
+      "effGasPriceWei": "20048001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0xebb1aa6478f8722ebc6334161cf825503b93e6b128607fc1fdc28ce841e71124"
+    },
+    {
+      "name": "deposit long side",
+      "status": "ok",
+      "hash": "0x6305445f78aa2db87e7f83830db2564a8d73714a93f5de33a1e6932561183c28",
+      "block": 329801990,
+      "gasUsed": "122605",
+      "effGasPriceWei": "20112001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0x6305445f78aa2db87e7f83830db2564a8d73714a93f5de33a1e6932561183c28"
+    },
+    {
+      "name": "short side rests an ask 0.5 @ 100 (GTC)",
+      "status": "ok",
+      "hash": "0xa04737a4e4c637624ccb951e0de94774efac30343f7f6809b5533eb50f0d94cb",
+      "block": 329802001,
+      "gasUsed": "357835",
+      "effGasPriceWei": "20076001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0xa04737a4e4c637624ccb951e0de94774efac30343f7f6809b5533eb50f0d94cb"
+    },
+    {
+      "name": "long side buys 0.5 @ 100 (IOC) -> Fill",
+      "status": "ok",
+      "hash": "0x01fd6ae1677e7b0c657d0bb382c06d2d4539e2fee6dcf324ccc25573433f0909",
+      "block": 329802012,
+      "gasUsed": "263908",
+      "effGasPriceWei": "20052001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0x01fd6ae1677e7b0c657d0bb382c06d2d4539e2fee6dcf324ccc25573433f0909",
+      "filledSize": "0.5000",
+      "state": {
+        "label": "after open",
+        "mark": "100.0000",
+        "backstopSize": "0.0000",
+        "inventoryNotionalUsdc": "0.0000",
+        "softNotionalUsdc": "10.0000",
+        "elevatedSince": 0,
+        "backstopEquityUsdc": "0.0000",
+        "unresolvedBadDebtUsdc": "0.0000",
+        "auction": {
+          "active": false,
+          "takerSells": false,
+          "price": "0.0000",
+          "discBps": "0",
+          "size": "0.0000"
         }
       }
     },
     {
       "name": "set demo price to 90 (long is now below maintenance)",
       "status": "ok",
-      "hash": "0xef7fc277d8298398fca0f191105d71db5dab32b6ba4c6ad2d6fd661a32059e80",
-      "block": 329229119,
+      "hash": "0x1aabf7f6cdfdcdf1f5d613ccc6951d494156ed2defbaedef9327291d619d2848",
+      "block": 329802029,
       "gasUsed": "32199",
-      "effGasPriceWei": "20096001",
-      "arbiscan": "https://sepolia.arbiscan.io/tx/0xef7fc277d8298398fca0f191105d71db5dab32b6ba4c6ad2d6fd661a32059e80",
+      "effGasPriceWei": "20000001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0x1aabf7f6cdfdcdf1f5d613ccc6951d494156ed2defbaedef9327291d619d2848",
       "price": "90.0000",
-      "longEquityUsdc": "0.0000",
-      "longMaintenanceUsdc": "0.0000"
+      "longEquityUsdc": "0.9750",
+      "longMaintenanceUsdc": "2.2500"
     },
     {
-      "name": "wait 20s (dwell 30s, then the discount ramps over 120s)",
+      "name": "liquidate the long (keeper) -> backstop takes inventory",
+      "status": "ok",
+      "hash": "0x873f02780e49db4e41c1054bc6d36a12ef7da13f40349f7e4fd2e2740d457c6f",
+      "block": 329802046,
+      "gasUsed": "244688",
+      "effGasPriceWei": "20034001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0x873f02780e49db4e41c1054bc6d36a12ef7da13f40349f7e4fd2e2740d457c6f",
+      "liquidatedSize": "0.5000",
+      "liqPrice": "90.0000",
+      "badDebtUsdc": "0.0000",
+      "elevatedEvents": [
+        {
+          "notionalUsdc": "45.0000"
+        }
+      ],
+      "state": {
+        "label": "after liquidation",
+        "mark": "90.0000",
+        "backstopSize": "0.5000",
+        "inventoryNotionalUsdc": "45.0000",
+        "softNotionalUsdc": "10.0000",
+        "elevatedSince": 1794838567,
+        "backstopEquityUsdc": "0.0000",
+        "unresolvedBadDebtUsdc": "0.0000",
+        "auction": {
+          "active": true,
+          "takerSells": false,
+          "price": "90.0000",
+          "discBps": "0",
+          "size": "0.5000"
+        }
+      }
+    },
+    {
+      "name": "syncBackstop",
+      "status": "ok",
+      "hash": "0xf9e3098f2beabdba80809ca305e5a2902a62186853997276e98d8cfb1288748e",
+      "block": 329802063,
+      "gasUsed": "77719",
+      "effGasPriceWei": "20000001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0xf9e3098f2beabdba80809ca305e5a2902a62186853997276e98d8cfb1288748e",
+      "events": 0,
+      "state": {
+        "label": "after sync",
+        "mark": "90.0000",
+        "backstopSize": "0.5000",
+        "inventoryNotionalUsdc": "45.0000",
+        "softNotionalUsdc": "10.0000",
+        "elevatedSince": 1794838567,
+        "backstopEquityUsdc": "0.0000",
+        "unresolvedBadDebtUsdc": "0.0000",
+        "auction": {
+          "active": true,
+          "takerSells": false,
+          "price": "90.0000",
+          "discBps": "0",
+          "size": "0.5000"
+        }
+      }
+    },
+    {
+      "name": "wait 45s (dwell 30s, then the discount ramps over 120s)",
       "status": "ok",
       "state": {
         "label": "auction after waiting",
@@ -69,14 +200,14 @@
         "backstopSize": "0.5000",
         "inventoryNotionalUsdc": "45.0000",
         "softNotionalUsdc": "10.0000",
-        "elevatedSince": 1794681730,
+        "elevatedSince": 1794838567,
         "backstopEquityUsdc": "0.0000",
         "unresolvedBadDebtUsdc": "0.0000",
         "auction": {
           "active": true,
           "takerSells": false,
-          "price": "88.6500",
-          "discBps": "150",
+          "price": "89.7570",
+          "discBps": "27",
           "size": "0.5000"
         }
       }
@@ -84,14 +215,14 @@
     {
       "name": "takeBackstop (short side buys the whole inventory at the auction price)",
       "status": "ok",
-      "hash": "0x02887600643acc4ef72edd615d2f96a4335db76dfaaa92e61f9f45afd221620a",
-      "block": 329229209,
-      "gasUsed": "235026",
-      "effGasPriceWei": "20034001",
-      "arbiscan": "https://sepolia.arbiscan.io/tx/0x02887600643acc4ef72edd615d2f96a4335db76dfaaa92e61f9f45afd221620a",
+      "hash": "0xe842a6e0b9e4a04b2578e10b58b66ee31831b5cb50bf857d1e6cfbea1b0740f1",
+      "block": 329802251,
+      "gasUsed": "245004",
+      "effGasPriceWei": "20000001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0xe842a6e0b9e4a04b2578e10b58b66ee31831b5cb50bf857d1e6cfbea1b0740f1",
       "takenSize": "0.5000",
-      "price": "88.6500",
-      "discBps": "150",
+      "price": "89.7120",
+      "discBps": "32",
       "feeUsdc": "0.0000",
       "relaxedEvents": 1,
       "state": {
@@ -102,7 +233,7 @@
         "softNotionalUsdc": "10.0000",
         "elevatedSince": 0,
         "backstopEquityUsdc": "0.0000",
-        "unresolvedBadDebtUsdc": "0.5625",
+        "unresolvedBadDebtUsdc": "0.0315",
         "auction": {
           "active": false,
           "takerSells": false,
@@ -115,11 +246,11 @@
     {
       "name": "pokeBackstop (refresh the clock; relaxes if inventory is under the cap)",
       "status": "ok",
-      "hash": "0xd495bd350867280725b9c7096bd27fcc68b90bccee2db947029cbb8324d10d7c",
-      "block": 329229227,
+      "hash": "0xe915f9b4212df56610f956b11489b20d9ae6f1d4e50784a1c130177a60601a7f",
+      "block": 329802264,
       "gasUsed": "59642",
-      "effGasPriceWei": "20052001",
-      "arbiscan": "https://sepolia.arbiscan.io/tx/0xd495bd350867280725b9c7096bd27fcc68b90bccee2db947029cbb8324d10d7c",
+      "effGasPriceWei": "20066001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0xe915f9b4212df56610f956b11489b20d9ae6f1d4e50784a1c130177a60601a7f",
       "relaxedEvents": 0,
       "state": {
         "label": "after poke",
@@ -129,7 +260,7 @@
         "softNotionalUsdc": "10.0000",
         "elevatedSince": 0,
         "backstopEquityUsdc": "0.0000",
-        "unresolvedBadDebtUsdc": "0.5625",
+        "unresolvedBadDebtUsdc": "0.0315",
         "auction": {
           "active": false,
           "takerSells": false,
@@ -142,23 +273,32 @@
     {
       "name": "restore demo price to 100",
       "status": "ok",
-      "hash": "0x0a401f61f75cad9f07c994d1a3ee70a582cb59692e06cbe7a9dd85f945a34d96",
-      "block": 329229242,
+      "hash": "0x93c567fac2b1d83f5e7426042a369d60610227c51003324d76c2ef829a2da863",
+      "block": 329802278,
       "gasUsed": "32187",
       "effGasPriceWei": "20000001",
-      "arbiscan": "https://sepolia.arbiscan.io/tx/0x0a401f61f75cad9f07c994d1a3ee70a582cb59692e06cbe7a9dd85f945a34d96",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0x93c567fac2b1d83f5e7426042a369d60610227c51003324d76c2ef829a2da863",
       "price": "100.0000"
     },
     {
       "name": "withdraw free collateral (short side)",
-      "status": "FAIL",
-      "withdrawableUsdc": "10.6750",
-      "error": "Error(ERC20: transfer amount exceeds balance)"
+      "status": "ok",
+      "withdrawableUsdc": "11.2515",
+      "hash": "0x3c82ceeb05bcd046d15ea5d02be8fad3e5dd07f4cca45cbf367d35f4abab8a96",
+      "block": 329802290,
+      "gasUsed": "143586",
+      "effGasPriceWei": "20000001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0x3c82ceeb05bcd046d15ea5d02be8fad3e5dd07f4cca45cbf367d35f4abab8a96"
     },
     {
       "name": "withdraw free collateral (long side)",
-      "status": "skipped",
-      "reason": "earlier stage failed: withdraw free collateral (short side)"
+      "status": "ok",
+      "withdrawableUsdc": "0.7500",
+      "hash": "0x78408553e733075a2a01d2f88d9adb705b942ff7a9554af407a60be9b2d325be",
+      "block": 329802302,
+      "gasUsed": "108955",
+      "effGasPriceWei": "20064001",
+      "arbiscan": "https://sepolia.arbiscan.io/tx/0x78408553e733075a2a01d2f88d9adb705b942ff7a9554af407a60be9b2d325be"
     }
   ]
 }

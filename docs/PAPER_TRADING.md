@@ -42,3 +42,10 @@ Oracle fresh and its age; oracle within bps of Coinbase; ladder geometry (32-ord
 - If the oracle lags a real move, takers can pick off the near tier (like a real market maker with a slow feed). This is normal for paper trading.
 - The ETH estimate assumes every order is replaced on its max age; actual use depends on price moves.
 - Funding only accrues if someone calls `pokeFunding` (the keeper, or `poke-funding.js`).
+
+## Keeping the 1-minute chart moving (simulated taker)
+The ladder bot's own taker fires only once per quoting pass (minutes). For a trade every ~20 s use the separate taker, which has its own wallet so it never shares the maker's nonce (`bots/src/testnet-taker.ts`, git-ignored key in `bots/.env.taker-testnet`):
+1. `npx tsx src/testnet-taker.ts keygen`, then fund the printed address with ETH and test USDC (`send-eth.js`, `mint-test-usdc.js`).
+2. `TAKER_DEPOSIT_USDC=500 CONFIRM_TAKER_SETUP=yes npx tsx src/testnet-taker.ts setup`
+3. `TAKER_EVERY_SEC=20 npx tsx src/testnet-taker.ts run` (0.001 BTC per trade, alternating sides; `TAKER_SIZE`, `TAKER_MAX_POS`).
+This is simulated activity on free test USDC, not real market activity.

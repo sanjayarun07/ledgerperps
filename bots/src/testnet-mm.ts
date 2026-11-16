@@ -244,14 +244,16 @@ async function main() {
       const top = await c.bestPrice(market, !isBuy); if (top === 0n) return;
       const cfg = await c.marketConfig(market, true);
       const px = isBuy ? top + cfg.tick : top - cfg.tick;
-      const r = await c.placeOrder({ market, isBuy, price: px, size: takerSizes.get(market)!, tif: Tif.IOC, reduceOnly: false, cloid: 0n, expiry: 0n }, { sub: TAKER_SUB });
+      const frac = BigInt(Math.round(num("TAKER_SIZE_FRAC", 1) * 1000)); const sz = ((takerSizes.get(market)! * frac / 1000n) / cfg.lot) * cfg.lot; if (sz === 0n) return;
+      const r = await c.placeOrder({ market, isBuy, price: px, size: sz, tif: Tif.IOC, reduceOnly: false, cloid: 0n, expiry: 0n }, { sub: TAKER_SUB });
       console.log(`${ts()} [taker] ${isBuy ? "buy" : "sell"} market ${market} @ ${fromPrice(px)} (best ${fromPrice(top)}) order ${r.orderId}`);
     } catch (e) { console.log(`${ts()} [taker] skipped: ${String((e as Error).message).split("\n")[0]}`); }
   }
   while (!stop) {
     const t0 = Date.now();
-    for (const b of bots) await b.tick(); // sequential: one key, one nonce
-    if (takerEvery > 0 && Date.now() - lastTake >= takerEvery) { lastTake = Date.now(); await takerTick(); }
+    const maybeTake = async () => { if (takerEvery > 0 && Date.now() - lastTake >= takerEvery) { lastTake = Date.now(); await takerTick(); } };
+    await maybeTake();
+    for (const b of bots) { await b.tick(); await maybeTake(); } // sequential: one key, one nonce. A full pass can take minutes, so the taker is checked between tiers too
     if (Date.now() - last > 60_000) { last = Date.now(); for (const b of bots) console.log(`${ts()} SUMMARY ${b.summary()}`); }
     await sleep(Math.max(0, interval - (Date.now() - t0)));
   }

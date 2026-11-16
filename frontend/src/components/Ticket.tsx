@@ -290,6 +290,21 @@ function OrderForm({ tab }: { tab: "market" | "limit" | "advanced" }) {
         <Field id="px" label="Limit price" tip="limit" value={price} onChange={setPrice} suffix="USDC" ph={mark ? formatFixed(mark, 6, 1, 1) : ""} error={touched && !!v && v.price === undefined && price.trim() !== ""}
           help={info ? (price.trim() === "" ? "Enter a price, or click a book price to fill it in." : `Steps of ${formatFixed(info.tick, 6)} USDC. Click a book price to fill it in.`) : undefined} />
       )}
+      {type === "limit" && info && (() => {
+        const bid = book?.bids.px[0]; const ask = book?.asks.px[0];
+        const tick = info.tick;
+        const mid = bid !== undefined && ask !== undefined ? ((bid + ask) / 2n / tick) * tick : undefined; // mid, rounded down to a tick
+        const fill = (p: bigint | undefined) => { if (p !== undefined) setPrice(formatFixed(p, 6)); };
+        const crossPx = isBuy ? ask : bid; // the best price on the other side: an order here fills straight away
+        return (
+          <div className="seg" role="group" aria-label="Fill the limit price" style={{ display: "flex", gap: 6, marginTop: -4 }}>
+            <button type="button" disabled={mid === undefined} title="The price halfway between the best bid and best ask. It rests in the gap, so it fills only when the price moves to it." onClick={() => fill(mid)}>Mid{mid !== undefined ? ` ${fmtPrice(mid)}` : ""}</button>
+            <button type="button" disabled={bid === undefined} title="Best bid" onClick={() => fill(bid)}>Bid</button>
+            <button type="button" disabled={ask === undefined} title="Best ask" onClick={() => fill(ask)}>Ask</button>
+            <button type="button" disabled={crossPx === undefined} title={isBuy ? "Best ask: buys immediately against the book" : "Best bid: sells immediately against the book"} onClick={() => fill(crossPx)}>Fill now</button>
+          </div>
+        );
+      })()}
       <Field id="sz" label="Position size" value={sizeIn} onChange={(x) => { setSizeIn(x); setPct(0); }} suffix={<span className="seg" role="group" aria-label="Size unit"><button type="button" aria-pressed={unit === "base"} className={unit === "base" ? "on" : ""} onClick={() => { setUnit("base"); setSizeIn(size); }}>{base}</button><button type="button" aria-pressed={unit === "quote"} className={unit === "quote" ? "on" : ""} onClick={() => { setUnit("quote"); setSizeIn(v?.notional ? formatFixed(v.notional, 6, 2, 2) : ""); }}>USDC</button></span>} ph={unit === "base" ? "0.0010" : "100"} error={touched && !!v && (v.size === undefined || belowLot)}
         help={info ? (belowLot ? `Too small: the minimum order is ${minOrderTxt}.` : `Minimum order ${minOrderTxt}; steps of ${formatFixed(info.lot, 8)} ${base}.${unit === "quote" && size ? ` = ${size} ${base}` : ""}`) : undefined} />
       <div className="slider">

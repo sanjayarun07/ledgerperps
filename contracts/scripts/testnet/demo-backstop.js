@@ -52,7 +52,7 @@ async function run({ d, chainId, signers, gate, out, checkDeployer, local = fals
   }
   const keeper = k1 ? k1.address : L.expectedDeployer(cfg);
   const shortAddr = keeper, shortSub = 0;                  // short / taker side = deployer sub0
-  const longAddr = t2 ? t2.address : keeper, longSub = t2 ? 0 : 1;
+  const longAddr = t2 ? t2.address : keeper, longSub = t2 ? 0 : Number(env.DEMO_LONG_SUB ?? 1); // DEMO_LONG_SUB: use a fresh, empty sub-account (leftover collateral can keep the long above maintenance)
   const longSigner = t2 || k1;
   console.log(`keeper+short side: ${shortAddr} sub${shortSub} | long side: ${longAddr} sub${longSub}${t2 ? "" : " (same wallet, sub-account 1)"}`);
   const shortKey = await ex.acctKey(shortAddr, shortSub), longKey = await ex.acctKey(longAddr, longSub);
@@ -109,6 +109,11 @@ async function run({ d, chainId, signers, gate, out, checkDeployer, local = fals
     s.usdcNeededFromKeeper = fmt6(need);
     if (live && pre.usdc < need) throw new Error(`keeper USDC ${fmt6(pre.usdc)} < ${fmt6(need)} needed (faucet: ${cfg.usdc.faucet})`);
     if (live && t2) { const b2 = await usdc.balanceOf(t2.address); if (b2 < DEPOSIT) throw new Error(`trader2 USDC ${fmt6(b2)} < ${fmt6(DEPOSIT)}`); }
+    if (live) { // the long must start empty, or leftover collateral keeps it above maintenance after the price drop (seen on deploy #3 with sub 1)
+      const lk = await ex.acctKey(longAddr, longSub); const lc = await ex.accountState(lk); const lp = await ex.positions(lk, mid);
+      s.longAccountEquityUsdc = fmt6(lc[0]);
+      if (lc[0] !== 0n || lp[0] !== 0n) throw new Error(`the long account (${longAddr} sub${longSub}) is not empty (equity ${fmt6(lc[0])}, position ${fmtSz(lp[0])}): set DEMO_LONG_SUB to an unused sub-account`);
+    }
     s.state = await readState("before");
     if (!RESUME && (s.state.auction.active || s.state.backstopSize !== "0.0000")) throw new Error("the demo market already has backstop inventory; wait for it to clear or use a fresh deployment");
   });
