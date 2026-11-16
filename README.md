@@ -47,7 +47,7 @@ storage in `PerpBase`) to fit the EIP-170 size limit. The module table is admin-
 | `docs/` | See below |
 
 ## Tests (last run 2026-11-16)
-- Hardhat: **107 passing** (`cd contracts && npx hardhat test`, about 4 minutes; includes fuzz and stress suites).
+- Hardhat: **141 passing** (`cd contracts && npx hardhat test`, about 4 minutes; includes fuzz and stress suites).
 - Foundry: 26 tests (last recorded; needs Foundry installed, not re-run in this update).
 - Bots: 52 passing. SDK: unit tests pass; live-chain suites are skipped by default.
 
@@ -131,6 +131,9 @@ Details and sizing: `docs/PAPER_TRADING.md`.
 Watch ETH balances for the bots and keeper, and re-run steps 3 to 7 (plus `docs/TESTNET_RUNBOOK.md` section 18) after every redeploy.
 
 **Mainnet is not covered.** It needs independent audits, a timelock and multisig, a sequencer-uptime check and more (`docs/PRODUCTION_READINESS.md`).
+
+## Built but not deployed yet
+Source and tests only, not on the live deploy #4: `batchPlace` / `batchCancel` / `requote`, a 3-slot order layout, a maker rebate (taker 5 bps, maker -1 bp) and a market-making vault. See `docs/GAS_REPORT.md`, `docs/VAULT.md` and `docs/DEPLOY_5_CHECKLIST.md`.
 
 ## Docs
 | Doc | Read it for |
