@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { parseEther, type Hex } from "viem";
 import { useApp } from "@/lib/app";
-import { EXCHANGE, IS_LOCAL, IS_TESTNET, MARKETS, NETWORK, USDC, usdcAbi } from "@/lib/config";
+import { COLLATERAL_MOCK, EXCHANGE, IS_LOCAL, IS_TESTNET, MARKETS, NETWORK, USDC, usdcAbi } from "@/lib/config";
 import { DEPOSIT_TEXT, depositStep } from "@/lib/network";
 import { useAccountState, useAdlScores, useAgents, useChainClock, useEthBalance, usePositions, useSolvency, useSystem, useUsdc, useWithdrawGate } from "@/lib/queries";
 import { effectiveLeverage, healthState } from "@/lib/risk";
@@ -93,8 +93,10 @@ function Funds() {
       <Row label="Gas (native token)"><Val v={eth !== undefined ? formatFixed(eth, 18, 4) : undefined} /></Row>
       {eth !== undefined && eth === 0n && <p className="callout warn">This wallet has no gas tokens, so it cannot send transactions. {IS_LOCAL ? "Disconnect and connect a Hardhat dev account (they come with gas)." : IS_TESTNET ? `Get free test ETH for ${NETWORK.shortName} gas from a faucet, such as ${NETWORK.faucets?.eth?.[0]?.replace("https://", "")}.` : "Add some native tokens for network fees."}</p>}
       {IS_LOCAL && <button className="btn sm full" disabled={blocked} onClick={() => send({ label: "Get 10,000 mock USDC (local faucet)", address: USDC, abi: usdcAbi, functionName: "mint", args: [w.address, 10_000_000_000n] })}>Get 10,000 mock USDC (local faucet)</button>}
+      {IS_TESTNET && COLLATERAL_MOCK && <button className="btn sm full" disabled={blocked} onClick={() => send({ label: "Get 1,000 test USDC (testnet faucet)", address: USDC, abi: usdcAbi, functionName: "mint", args: [w.address, 1_000_000_000n] })}>Get 1,000 test USDC (testnet faucet)</button>}
+      {IS_TESTNET && COLLATERAL_MOCK && <p className="callout info faucet">Test funds only. This testnet uses a free test USDC, not Circle USDC. Get test ETH for gas from <a href={NETWORK.faucets?.eth?.[0]} target="_blank" rel="noopener noreferrer">an {NETWORK.shortName} faucet</a>.</p>}
 
-      {IS_TESTNET && NETWORK.faucets?.usdc && <p className="callout info faucet">Test funds only. <a href={NETWORK.faucets.usdc} target="_blank" rel="noopener noreferrer">Get test USDC from the Circle faucet</a>, and test ETH for gas from <a href={NETWORK.faucets.eth?.[0]} target="_blank" rel="noopener noreferrer">an {NETWORK.shortName} faucet</a>.</p>}
+      {IS_TESTNET && !COLLATERAL_MOCK && NETWORK.faucets?.usdc && <p className="callout info faucet">Test funds only. <a href={NETWORK.faucets.usdc} target="_blank" rel="noopener noreferrer">Get test USDC from the Circle faucet</a>, and test ETH for gas from <a href={NETWORK.faucets.eth?.[0]} target="_blank" rel="noopener noreferrer">an {NETWORK.shortName} faucet</a>.</p>}
       <h4><Tip k="collateral">Deposit USDC</Tip></h4>
       {empty && <p className="callout info">Your account is empty. Deposit some USDC to start trading.</p>}
       <div className="row"><div className="inp"><input id="deposit-input" aria-label="Deposit amount in USDC" inputMode="decimal" placeholder="0.00" value={dep} onChange={(e) => setDep(e.target.value)} /><em>USDC</em></div>

@@ -22,7 +22,9 @@ export const DEPLOYED = EXCHANGE !== "0x0000000000000000000000000000000000000000
 export const IS_LOCAL = NETWORK_KIND === "local";
 export const IS_TESTNET = NETWORK_KIND === "testnet";
 /** The local MockUSDC ABI has mint; every other network uses a plain ERC-20 ABI. */
-export const usdcAbi = (IS_LOCAL ? usdcAbiJson : ERC20_ABI) as unknown as Abi;
+/** True when the deployment uses the free-mint MockUSDC as collateral (testnet deploy with USE_MOCK_USDC=yes), so the UI can offer a mint button instead of the Circle faucet. */
+export const COLLATERAL_MOCK = (deployment as { collateral?: string }).collateral === "mock";
+export const usdcAbi = (IS_LOCAL || COLLATERAL_MOCK ? usdcAbiJson : ERC20_ABI) as unknown as Abi;
 export const FEEDS = deployment.feeds as Record<string, Hex>;
 
 export type OracleKind = "demo" | "chainlink" | "median" | "manual";
