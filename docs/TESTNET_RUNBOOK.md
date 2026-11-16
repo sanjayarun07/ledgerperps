@@ -237,3 +237,20 @@ What each step proves, and what it does not:
 * 8 proves liquidation against a Chainlink price on a public chain. It does not prove behaviour in a large price gap or sequencer outage.
 * 9 on DEMO-USD is a controlled test, not a real-feed test.
 * Funding: run `poke-funding.js` with `CONFIRM_POKE_FUNDING=yes` twice, at least 3600 s apart, while a position is open (see the script header).
+
+## 18. After a redeploy: move the live keeper to the new exchange (USER commands; added 2026-11-16, deploy #4)
+The keeper reads the exchange and start block from `contracts/deployments/arbitrumSepolia.json` only when it starts, and keeps a checkpoint in `infra/testnet/keeper-state.json`. After a redeploy the old keeper keeps spending gas on the OLD exchange until you restart it. Your keeper key stays in your shell; never put it in a file or paste it anywhere.
+
+Run from the repo root:
+1. Stop the old keeper (this also removes the pid file): `infra/testnet/run-keeper.sh stop`
+2. Make sure the old process is gone: `infra/testnet/run-keeper.sh status` should say "not running". If a stale process or lock remains, `kill` its pid, then remove `infra/testnet/keeper-state.json.lock`.
+3. Archive the old checkpoint so the new exchange starts clean: `mv infra/testnet/keeper-state.json infra/testnet/keeper-state.deploy3.json`
+4. Check the services the keeper needs: `curl -s localhost:18700/v1/status` should show the NEW exchange address and `synced: true`; the RPC forwarder must answer on `localhost:18701`.
+5. Start the keeper live, with funding sampled every 2 minutes (inside the exchange's 300 s `MAX_SAMPLE_HOLD`, SA-2):
+   `export KEEPER_PRIVATE_KEY=0x...` (your keeper key, in your shell only), then
+   `KEEPER_FUNDING_INTERVAL_SECS=120 KEEPER_LIVE=yes infra/testnet/run-keeper.sh start`
+6. Confirm: `infra/testnet/run-keeper.sh status` shows the new exchange, `dry_run=false` and your keeper address, and the log shows `poke_funding` transactions on the new exchange.
+
+Gas: each funding poke is about 59k gas per market, so 4 markets every 2 minutes is about 120 pokes an hour. Keep an eye on the keeper's ETH balance; the per-job budgets are in `keeper.testnet.toml`. The DEMO-USD market is admin-priced and goes stale after 30 minutes, so the keeper will log "oracle degraded" for it until `refresh-demo-price.js` is run again (`CONFIRM_REFRESH_DEMO=yes`).
+
+Do the same for the other services after any redeploy: `node frontend/scripts/sync-deployment.mjs arbitrumSepolia --out deployment.testnet.json`, `infra/testnet/run-indexer.sh reset`, then restart the frontend dev server and the bots (the bots read the deployment file at start).
