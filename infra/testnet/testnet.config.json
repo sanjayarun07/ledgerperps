@@ -94,6 +94,11 @@
           "block": 329772712,
           "chainId": 421614,
           "details": "desc=\"BTC / USD\" dec=8 price=64352.52622516 age=76s"
+        },
+        "bounds": {
+          "min": "10000000000",
+          "max": "500000000000",
+          "note": "SA-8 sanity range in 1e6 units; wide on purpose, only meant to reject a feed pinned at a circuit-breaker value"
         }
       },
       "pyth": {
@@ -154,6 +159,11 @@
           "block": 329772712,
           "chainId": 421614,
           "details": "desc=\"ETH / USD\" dec=8 price=1802.41 age=25s"
+        },
+        "bounds": {
+          "min": "200000000",
+          "max": "20000000000",
+          "note": "SA-8 sanity range in 1e6 units; wide on purpose, only meant to reject a feed pinned at a circuit-breaker value"
         }
       },
       "pyth": {
@@ -214,6 +224,11 @@
           "block": 329772712,
           "chainId": 421614,
           "details": "desc=\"SOL / USD\" dec=8 price=71.54718104 age=4011s"
+        },
+        "bounds": {
+          "min": "5000000",
+          "max": "2000000000",
+          "note": "SA-8 sanity range in 1e6 units; wide on purpose, only meant to reject a feed pinned at a circuit-breaker value"
         }
       },
       "pyth": {

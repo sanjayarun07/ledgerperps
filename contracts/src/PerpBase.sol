@@ -196,6 +196,8 @@ abstract contract PerpBase is AccessControl, ReentrancyGuard, EIP712 {
     bool public backstopPlaceOpen = true; // discretionary backstopPlace allowed (guardian may close it, only admin may reopen)
 
     // params
+    /// @notice SA-2: longest span one funding premium sample is allowed to represent.
+    uint256 public constant MAX_SAMPLE_HOLD = 300;
     uint32 public takerFeeBps = 5;
     int32 public makerFeeBps = 1; // negative = rebate
     uint32 public liqFeeBps = 50; // of liquidated notional

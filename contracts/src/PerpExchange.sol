@@ -283,7 +283,9 @@ contract PerpExchange is PerpBase {
         uint256 dt = nowT - M.lastSample;
         if (M.state == State.Paused || M.state == State.Delisted) { M.lastSample = uint64(nowT); M.lastPremiumValid = false; }
         else {
-            if (M.lastPremiumValid && dt > 0) { M.premiumIntegral += M.lastPremium * int256(dt); M.sampledTime += dt; }
+            // SA-2: a sample stands for at most MAX_SAMPLE_HOLD seconds. Time beyond that is not extrapolated (it is simply not counted), so whoever
+            // pokes after skewing the book controls at most MAX_SAMPLE_HOLD seconds of premium, not the whole gap. Keepers should poke well inside it.
+            if (M.lastPremiumValid && dt > 0) { uint256 hold = dt > MAX_SAMPLE_HOLD ? MAX_SAMPLE_HOLD : dt; M.premiumIntegral += M.lastPremium * int256(hold); M.sampledTime += hold; }
             (uint256 idx, bool ok) = _index(m);
             if (ok) {
                 uint256 mk = _markFrom(m, idx);

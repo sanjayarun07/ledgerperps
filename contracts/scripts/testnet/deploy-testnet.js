@@ -99,6 +99,7 @@ async function main() {
     const cl = await deploy("ChainlinkAdapter", "ChainlinkAdapter", []);
     // Dry-run cannot estimate calls on not-yet-existing contracts: they are listed, not estimated.
     for (const m of med) await call(`ChainlinkAdapter.setFeed(${m.name})`, execute ? cl : { }, "setFeed", [m.feedId, m.chainlink.address]);
+    for (const m of med) if (m.chainlink.bounds) await call(`ChainlinkAdapter.setBounds(${m.name})`, execute ? cl : { }, "setBounds", [m.feedId, m.chainlink.bounds.min, m.chainlink.bounds.max]);
     if (oracleMode === "median") {
       const py = await deploy("PythAdapter", "PythAdapter", [cfg.pyth.address, BigInt(cfg.oracle.pythMaxConfBps)]);
       const mo = await deploy("MedianOracle", "MedianOracle", [await cl.getAddress(), await py.getAddress(), BigInt(cfg.oracle.medianMaxAgeSecs), BigInt(cfg.oracle.medianMaxDevBps)]);
