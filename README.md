@@ -29,7 +29,7 @@ Price-time-priority CLOB with bounded matching; GTC / IOC / FOK / post-only / re
 margin; funding with lazy settlement and capped premium sampling; permissionless liquidation to a backstop account with a Dutch-auction unwind; insurance fund;
 **ADL** and `recapitalize`; stop, take-profit and bracket orders; **TWAP**; EIP-712 / EIP-1271 relayed and signed orders; trading-only agent (session) keys with
 optional market and notional scopes; subaccounts (up to 32 open orders each); market states including delisting and final settlement; bounded per-market parameter updates.
-Units and formulas: `docs/SPEC.md`. Known gaps: `docs/GAPS.md`.
+New to the codebase? Start with `docs/HANDOVER.md` (setup, architecture, operations, what is unverified). Units and formulas: `docs/SPEC.md`. Known gaps: `docs/GAPS.md`.
 
 Design note: one contract was split into a router plus five delegatecall modules (`PerpTrading`, `PerpExtras`, `PerpLiquidation`, `PerpTwap`, `PerpAdl`, shared
 storage in `PerpBase`) to fit the EIP-170 size limit. The module table is admin-controlled until `lockModules()`; treat module registration as an upgrade power.
