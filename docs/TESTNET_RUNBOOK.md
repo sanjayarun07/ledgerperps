@@ -253,4 +253,9 @@ Run from the repo root:
 
 Gas: each funding poke is about 59k gas per market, so 4 markets every 2 minutes is about 120 pokes an hour. Keep an eye on the keeper's ETH balance; the per-job budgets are in `keeper.testnet.toml`. The DEMO-USD market is admin-priced and goes stale after 30 minutes, so the keeper will log "oracle degraded" for it until `refresh-demo-price.js` is run again (`CONFIRM_REFRESH_DEMO=yes`).
 
+**Lessons from the deploy #5 move (2026-11-17).**
+* `run-keeper.sh stop` only stops the pid in `keeper.pid`. If an older keeper is still running it holds `keeper-state.json.lock` and the new one exits with "checkpoint ... is in use". Check with `ps aux | grep perp-keeper` and `kill` the old pid before starting.
+* The shared forwarder on :18701 is single-lane and also serves the indexer, bots and frontend. The keeper's first replay (about 220k blocks) sat at zero progress for 14 minutes behind them. Give the keeper its own forwarder: `UPSTREAM_RPC_URL=https://arbitrum-sepolia-rpc.publicnode.com PROXY_PORT=18703 PROXY_CONCURRENCY=3 PROXY_MIN_GAP_MS=150 node infra/testnet/rpc-proxy.js`, then start the keeper with `KEEPER_RPC_URL=http://127.0.0.1:18703`. First replay then took about 3 minutes.
+* Liquidation test account (step 8 of section 17): `CONFIRM_LIQ_POSITION=yes npx hardhat --config hardhat.testnet.config.js run scripts/testnet/open-liq-position.js --network arbitrumSepolia` opens a 0.001 BTC long at about 10x from a throwaway key in `contracts/.env.liqtest` (git-ignored). Liquidation needs roughly a 6.5% fall; it has NOT been observed yet.
+
 Do the same for the other services after any redeploy: `node frontend/scripts/sync-deployment.mjs arbitrumSepolia --out deployment.testnet.json`, `infra/testnet/run-indexer.sh reset`, then restart the frontend dev server and the bots (the bots read the deployment file at start).
